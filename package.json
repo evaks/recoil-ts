@@ -1,10 +1,11 @@
-{
+ {
   "name": "recoil",
-  "version": "1.0.0",
-  "description": "",
-  "main": "dist/index.js",
+  "version": "0.0.0",
+  "type": "module",
   "scripts": {
-    "build": "tsc",
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
     "test": "jest"
   },
   "devDependencies": {
@@ -17,10 +18,11 @@
     "jest": "^30.0.3",
     "jest-environment-jsdom": "^30.0.2",
     "to": "^0.2.9",
-    "ts-jest": "^29.4.0",
+    "ts-jest": "^29.4.1",
     "ts-node": "^10.9.2",
     "tsx": "^4.20.3",
-    "typescript": "^5.5.3"
+    "typescript": "^5.5.3",
+    "vite": "^7.1.2"
   },
   "private": true
 }

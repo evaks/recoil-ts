@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Custom Select with Arrow</title>
+    <style>
+        .custom-select {
+            position: relative;
+            display: inline-block;
+            width: 220px;
+            user-select: none;
+            cursor: pointer;
+        }
+        .selected {
+            padding: 8px 32px 8px 8px; /* room for arrow */
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            background: #fff;
+            position: relative;
+        }
+        .selected::after {
+            content: "▼"; /* arrow */
+            font-size: 12px;
+            position: absolute;
+            right: 10px;
+            top: 50%;
+            transform: translateY(-50%);
+            pointer-events: none;
+        }
+        .options {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            background: #fff;
+            display: none;
+            z-index: 100;
+            margin-top: 4px;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+        }
+        .option {
+            padding: 8px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .option:hover {
+            background: #eee;
+        }
+    </style>
+</head>
+<body>
+
+<div class="custom-select" id="mySelect">
+    <div class="selected">Select an option</div>
+    <div class="options">
+        <div class="option" data-value="apple">
+            <img src="https://via.placeholder.com/20/FF0000" /><b> booo</b> <span>Apple</span>
+        </div>
+        <div class="option" data-value="banana">
+            <img src="https://via.placeholder.com/20/FFFF00" /> <span>Banana</span>
+        </div>
+        <div class="option" data-value="cherry">
+            <b style="color: darkred;">🍒 Cherry</b>
+        </div>
+    </div>
+</div>
+
+<script>
+    const select = document.getElementById("mySelect");
+    const selected = select.querySelector(".selected");
+    const options = select.querySelector(".options");
+
+    selected.addEventListener("click", () => {
+        options.style.display = options.style.display === "block" ? "none" : "block";
+    });
+
+    options.addEventListener("click", e => {
+        const option = e.target.closest(".option");
+        if (option) {
+            selected.innerHTML = option.innerHTML; // copy arbitrary HTML
+            selected.dataset.value = option.dataset.value;
+            options.style.display = "none";
+            console.log("Selected value:", option.dataset.value);
+        }
+    });
+
+    document.addEventListener("click", e => {
+        if (!select.contains(e.target)) {
+            options.style.display = "none";
+        }
+    });
+</script>
+
+</body>
+</html>

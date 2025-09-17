@@ -1,15 +1,15 @@
 import assert from 'assert/strict';
 import test from 'node:test';
-import {BStatus, Frp} from "../../frp/frp";
-import {Cache} from "./cache"
+import {BStatus, Frp} from "../../frp/frp.ts";
+import {Cache} from "./cache.ts"
 
 test("Cache", () => {
-    var frp = new Frp();
-    var b = frp.createNotReadyB();
-    var c = frp.createNotReadyB();
-    var cache = new Cache('v1');
+    let frp = new Frp();
+    let b = frp.createNotReadyB();
+    let c = frp.createNotReadyB();
+    let cache = new Cache('v1');
     cache.clear();
-    var cachedB = cache.get("key1", b);
+    let cachedB = cache.get("key1", b);
 
     frp.attach(cachedB);
     assert.deepEqual(BStatus.notReady(), cachedB.unsafeMetaGet());
@@ -22,7 +22,7 @@ test("Cache", () => {
     }, cachedB);
     assert.deepEqual({a:2}, cachedB.unsafeMetaGet().get());
     
-    var cached1B = cache.get("key1", c);
+    let cached1B = cache.get("key1", c);
     frp.attach(cached1B);
     assert.deepEqual({a:2}, cached1B.unsafeMetaGet().get());
     

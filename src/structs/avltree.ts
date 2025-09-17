@@ -41,7 +41,7 @@
  * </pre>
  */
 
-import {clone,compare, registerCompare} from "../util/object";
+import {clone,compare, registerCompare} from "../util/object.js";
 
 
 
@@ -110,7 +110,7 @@ class Node<Type> {
     
 };
 
-class AvlTreeIterator<Type> implements Iterable<Type>, Iterator<Type, any, any> {
+class AvlTreeIterator<Type, KeyType = Type> implements Iterable<Type>, Iterator<Type, any, any> {
     node:Node<Type>|null;
     endNode:Node<Type>|null;
     prev:Node<Type>|null;
@@ -160,14 +160,14 @@ class AvlTreeIterator<Type> implements Iterable<Type>, Iterator<Type, any, any> 
  * the tree enforces a O(logn) maximum height.
  *
  */
-export class AvlTree<Type> implements Iterable<Type> {
-    private readonly comparator_:(x:Type,y:Type) => number;
+export class AvlTree<Type, KeyType extends Partial<Type> | Type = Type> implements Iterable<Type> {
+    private readonly comparator_:(x:KeyType,y:KeyType) => number;
     private root_: Node<Type>|null;
     private minNode_: Node<Type>|null = null;
     private maxNode_: Node<Type>|null = null;
     
     
-    constructor(opt_comparator?:(x: Type, y: Type) => number, initialValues?: Iterable<Type>) {
+    constructor(opt_comparator?:(x: KeyType, y: KeyType) => number, initialValues?: Iterable<Type>) {
         this.comparator_ = opt_comparator || DEFAULT_COMPARATOR;
         this.root_ = null;
         if (initialValues !== undefined) {
@@ -177,6 +177,10 @@ export class AvlTree<Type> implements Iterable<Type> {
         }
     }
 
+    comparator():(x:any, y:any) => number {
+        return this.comparator_;
+    }
+
     private findLastNode(value?:Type):Node<Type>|null {
         if (value === undefined) {
             return null;
@@ -184,7 +188,7 @@ export class AvlTree<Type> implements Iterable<Type> {
         let endNode:Node<Type>|null = null;
         this.traverse_(node => {
             let retNode = null;
-            let comparison = this.comparator_(node.value, value as Type);
+            let comparison = this.comparator_(node.value as KeyType, value as KeyType);
             if (comparison > 0) {
                 retNode = node.left;
             } else if (comparison < 0) {
@@ -206,7 +210,7 @@ export class AvlTree<Type> implements Iterable<Type> {
         if (this.root_ !== null && startValue !== undefined) {
             this.traverse_(node => {
                 let retNode = null;
-                let comparison = this.comparator_(node.value, startValue as Type);
+                let comparison = this.comparator_(node.value as KeyType, startValue as KeyType);
                 if (comparison > 0) {
                     retNode = node.left;
                     startNode = node;
@@ -228,12 +232,11 @@ export class AvlTree<Type> implements Iterable<Type> {
     }
 
 
-    findFirst(value:Type) : Type|null {
-        var me = this;
-        var found = null;
-        this.inOrderTraverse(function(travNode) {
-            if (me.comparator_(travNode, value ) === 0) {
-                found = travNode;
+    findFirst(value: KeyType|Type) : Type|null {
+        let found:Type|null = null;
+         this.inOrderTraverse((travNode)  => {
+            if (this.comparator_(travNode as KeyType, value as KeyType ) === 0) {
+                found = travNode as Type;
                 
             }
             return true;
@@ -281,7 +284,7 @@ export class AvlTree<Type> implements Iterable<Type> {
      * @return {boolean}
      */
     private addInternal_(value:Type, currentNode:Node<Type>): boolean {
-        let comparison = this.comparator_(value, currentNode.value);
+        let comparison = this.comparator_(value as KeyType, currentNode.value as KeyType);
         let added = false;
         
         if (comparison > 0) {
@@ -349,23 +352,23 @@ export class AvlTree<Type> implements Iterable<Type> {
      *     null if nothing was removed in addition to the root of the modified
      *     subtree.
      */
-    private removeInternal_(value:Type, currentNode:Node<Type>| null): {value:Type|null, root:Node<Type> | null} {
+    private removeInternal_(value:KeyType|Type, currentNode:Node<Type>| null): {value:Type|null, root:Node<Type> | null} {
         if (!currentNode) {
             return {value: null, root: null};
         }
         
-        let comparison = this.comparator_(currentNode.value, value);
+        let comparison = this.comparator_(currentNode.value as KeyType, value as KeyType);
         
         if (comparison > 0) {
             let removeResult = this.removeInternal_(value, currentNode.left);
             currentNode.left = removeResult.root;
-            value = removeResult.value as Type;
+            value = removeResult.value as KeyType;
         } else if (comparison < 0) {
             let removeResult = this.removeInternal_(value, currentNode.right);
             currentNode.right = removeResult.root;
-            value = removeResult.value as Type;
+            value = removeResult.value as KeyType;
         } else {
-            value = currentNode.value;
+            value = currentNode.value as KeyType;
             if (!currentNode.left || !currentNode.right) {
                 // Zero or one children.
                 let replacement = currentNode.left ? currentNode.left : currentNode.right;
@@ -377,7 +380,7 @@ export class AvlTree<Type> implements Iterable<Type> {
                     if (this.minNode_ == currentNode) {
                         this.minNode_ = currentNode.parent;
                     }
-                    return {value: value, root: null};
+                    return {value: value as Type, root: null};
                 }
                 
                 if (this.maxNode_ == currentNode) {
@@ -404,7 +407,7 @@ export class AvlTree<Type> implements Iterable<Type> {
                 }, currentNode.right);
                 currentNode.value = nextInOrder.value;
                 let removeResult = this.removeInternal_(
-                    /** @type {?} */ (nextInOrder.value), currentNode.right);
+                    /** @type {?} */ (nextInOrder.value as KeyType), currentNode.right);
                 currentNode.right = removeResult.root;
             }
         }
@@ -412,7 +415,7 @@ export class AvlTree<Type> implements Iterable<Type> {
         currentNode.count = AvlTree.count(currentNode.left) + AvlTree.count(currentNode.right) + 1;
         currentNode.height =
             Math.max(AvlTree.height(currentNode.left), AvlTree.height(currentNode.right)) + 1;
-        return {root: this.balance_(currentNode), value: value};
+        return {root: this.balance_(currentNode), value: value as Type};
     }
 
     
@@ -426,11 +429,11 @@ export class AvlTree<Type> implements Iterable<Type> {
      *     the tree.
      * @override
      */
-    remove(value:Type):Type|null {
+    remove(value:Type|KeyType):Type|null {
         let result = this.removeInternal_(value, this.root_);
         this.root_ = result.root;
         return result.value;
-    };
+    }
 
 
     /**
@@ -451,14 +454,14 @@ export class AvlTree<Type> implements Iterable<Type> {
      * @return {boolean} Whether the tree contains a node with the specified value.
      * @override
      */
-    contains(value:Type):boolean {
+    contains(value:Type|KeyType):boolean {
         // Assume the value is not in the tree and set this value if it is found
         let isContained = false;
         
         // Depth traverse the tree and set isContained if we find the node
         this.traverse_((node) => {
             let retNode = null;
-            let comparison = this.comparator_(node.value, value);
+            let comparison = this.comparator_(node.value as KeyType, value as KeyType);
             if (comparison > 0) {
                 retNode = node.left;
             } else if (comparison < 0) {
@@ -485,14 +488,14 @@ export class AvlTree<Type> implements Iterable<Type> {
      * @return {number} The in-order index of the given value in the
      *     tree or -1 if the value is not found.
      */
-    indexOf(value:Type):number {
+    indexOf(value:Type|KeyType):number {
         // Assume the value is not in the tree and set this value if it is found
         let retIndex = -1;
         let currIndex = 0;
         
         // Depth traverse the tree and set retIndex if we find the node
         this.traverse_(node => {
-            let comparison = this.comparator_(node.value, value);
+            let comparison = this.comparator_(node.value as KeyType, value as KeyType);
             if (comparison > 0) {
                 // The value is less than this node, so recurse into the left subtree.
                 return node.left;
@@ -609,7 +612,7 @@ export class AvlTree<Type> implements Iterable<Type> {
      * @param {T=} opt_startValue If specified, traversal will begin on the node
      *     with the smallest value >= opt_startValue.
      */
-    inOrderTraverse(func:(v:Type)=> any, opt_startValue?:Type) {
+    inOrderTraverse(func:(v:Type)=> any, opt_startValue?:KeyType|Type) {
         // If our tree is empty, return immediately
         if (!this.root_) {
             return;
@@ -621,7 +624,7 @@ export class AvlTree<Type> implements Iterable<Type> {
         if (opt_startValue !== undefined) {
             this.traverse_(node => {
                 let retNode = null;
-                let comparison = this.comparator_(node.value, opt_startValue as Type);
+                let comparison = this.comparator_(node.value as KeyType, opt_startValue as KeyType);
                 if (comparison > 0) {
                     retNode = node.left;
                     startNode = node;
@@ -681,7 +684,7 @@ export class AvlTree<Type> implements Iterable<Type> {
         if (opt_startValue !== undefined) {
             this.traverse_((node) => {
                 let retNode = null;
-                let comparison = this.comparator_(node.value, opt_startValue as Type);
+                let comparison = this.comparator_(node.value as KeyType, opt_startValue as KeyType);
                 if (comparison > 0) {
                     retNode = node.left;
                 } else if (comparison < 0) {
@@ -921,12 +924,12 @@ export class AvlTree<Type> implements Iterable<Type> {
         return res;
     }
 
-    clone(opt_used : WeakMap<any,any> = new WeakMap()) : AvlTree<Type> {
+    clone(opt_used : WeakMap<any,any> = new WeakMap()) : AvlTree<Type, KeyType> {
         let me = opt_used.get(this);
         if (me) {
             return me;
         }
-        let result = new AvlTree(this.comparator_);
+        let result = new AvlTree<Type,KeyType>(this.comparator_);
         opt_used.set(this, result);
         this.inOrderTraverse(function(el) {
             result.add(clone(el, opt_used));

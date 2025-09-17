@@ -1,7 +1,7 @@
-import {Behaviour, BehaviourCalcFn, BehaviourCalcThisFn, BehaviourList, BehaviourList1, BStatus, Frp} from "./frp";
-import {LocalBehaviour} from "../ui/frp/localbehaviour";
-import {Serializer} from "../ui/frp/cache";
-import {StructType} from "./struct";
+import {Behaviour, type BehaviourCalcThisFn, type BehaviourList, type BehaviourList1, BStatus, Frp} from "./frp.ts";
+import {LocalBehaviour} from "../ui/frp/localbehaviour.ts";
+import {type Serializer} from "../ui/frp/cache.ts";
+import {type StructType} from "./struct.ts";
 
 
 export class Util {

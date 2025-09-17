@@ -2,7 +2,7 @@ import assert from 'assert/strict';
 import test from 'node:test';
 
 
-import {isEqual, toString, compare, clone} from './object'
+import {isEqual, toString, compare, clone} from './object.ts'
 
 test("test equal", () => {
     const overrideEquals = {

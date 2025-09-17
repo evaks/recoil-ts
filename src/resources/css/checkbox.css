@@ -1,0 +1,71 @@
+
+.recoil-checkbox input[type="checkbox"] {
+    width: 1.2em;
+    height: 1.2em;
+    border: 1px solid #333;
+    border-radius: 3px;
+    position: relative;
+    cursor: pointer;
+    vertical-align: middle;
+}
+.recoil-checkbox input[type="checkbox"].recoil-checkbox-unknown:disabled {
+    background-color: #ddd;
+}
+
+.recoil-checkbox input[type="checkbox"].recoil-checkbox-unknown.recoil-readonly:disabled {
+    background-color: transparent;
+}
+.recoil-checkbox input[type="checkbox"].recoil-readonly:disabled {
+    background-color: transparent;
+    color: #0060df;
+    appearance: none;
+    -webkit-appearance: none;
+    border: none;
+
+}
+
+.recoil-checkbox input[type="checkbox"].recoil-readonly::after {
+    content: "\274C";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+}
+
+.recoil-checkbox input[type="checkbox"].recoil-readonly:checked::after {
+    content: "✔";
+    position: absolute;
+    color: green;
+}
+
+.recoil-checkbox input[type="checkbox"].recoil-checkbox-unknown.recoil-readonly:checked::after {
+    content: "?";
+    position: absolute;
+    color: #a54722;
+}
+
+
+
+.recoil-checkbox input[type="checkbox"].recoil-checkbox-unknown {
+    appearance: none;
+    -webkit-appearance: none;
+    width: 1.2em;
+    height: 1.2em;
+    border: 1px solid #666;
+    border-radius: 3px;
+    position: relative;
+    cursor: pointer;
+    vertical-align: middle;
+}
+.recoil-checkbox input[type="checkbox"].recoil-checkbox-unknown:checked::after {
+    content: "?";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 14px;
+    font-weight: bold;
+    color: #666;
+    font-family: sans-serif;
+
+}

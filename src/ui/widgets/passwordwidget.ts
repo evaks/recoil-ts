@@ -1,11 +1,6 @@
-goog.provide('recoil.ui.widgets.PasswordWidget');
-
-goog.require('goog.events');
-goog.require('goog.events.InputHandler');
-goog.require('goog.ui.Component');
-goog.require('recoil.frp.Util');
-goog.require('recoil.ui.Widget');
-goog.require('recoil.ui.widgets.InputWidget');
+import {Widget} from "./widget.ts";
+import {WidgetScope} from "./widgetscope.ts";
+import {InputWidget} from "./input.ts";
 
 /**
  *
@@ -14,8 +9,11 @@ goog.require('recoil.ui.widgets.InputWidget');
  * @constructor
  * @implements {recoil.ui.Widget}
  */
-recoil.ui.widgets.PasswordWidget = function(scope, opt_autocomplete) {
-    this.scope_ = scope;
+export class PasswordWidget extends Widget {
+    private passwordInput_:InputWidget;
+
+    constructor(scope:WidgetScope, opt_autocomplete = true) {
+        super(scope);
     let frp = scope.getFrp();
     
     let passwordDiv = goog.dom.createDom('dive','goog-inline-block');
@@ -26,12 +24,19 @@ recoil.ui.widgets.PasswordWidget = function(scope, opt_autocomplete) {
         this.showIcon_, this.hideIcon_
     );
     this.containerDiv_ = goog.dom.createDom('div', {}, passwordDiv, this.show_);
-    this.component_ = recoil.ui.ComponentWidgetHelper.elementToNoFocusControl(this.containerDiv_);
 
-    this.passwordInput_ = new recoil.ui.widgets.InputWidget(scope, opt_autocomplete);
-    this.passwordInput_.setType('password');
+    this.passwordInput_ = new InputWidget(scope);
+    if (opt_autocomplete) {
+        this.passwordInput_.setType('password');
+    } else {
+        // you can't trust browsers not to autocomplete passwords, but sometimes it is necessary not to, for example
+        // user management screens where you are setting someone else's password
+        // to handle this just use an ordinary text field and change the font so its dots
 
-    var el = this.passwordInput_.getComponent().getElement();
+    }
+
+
+    let el = this.passwordInput_.getComponent().getElement();
     if (!el) {
         this.passwordInput_.getComponent().createDom();
         el = this.passwordInput_.getComponent().getElement();

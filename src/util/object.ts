@@ -1,4 +1,4 @@
-import Sequence from "./sequence";
+import Sequence from "./sequence.ts";
 
 export function defaultCompare(a:any, b:any): number {
     return a > b ? 1 : a < b ? -1 : 0;
@@ -27,7 +27,7 @@ export function safeFreeze (value: any) {
  * calls compare on all arguments, returns the first non-zero result
  *
  */
-export function compareAll(values: [{x: any, y: any}],): number | undefined{
+export function compareAll(values: {x: any, y: any}[]): number | undefined{
     for (let i = 0; i < values.length; i++) {
         let  res = compare(values[i].x, values[i].y);
         if (res !== 0) {
@@ -46,7 +46,7 @@ export function compareAll(values: [{x: any, y: any}],): number | undefined{
  * @param {{key}} b
  * @return {number}
  */
-function compareKey(a: {key:any}, b: {key:any}):number {
+export function compareKey(a: {key:any}, b: {key:any}):number {
     return compare(a.key, b.key) as number;
 }
 
@@ -165,9 +165,8 @@ export function compare(a:any, b:any, ignore: Set<string> = new Set(), aPath:Set
         }
         return -1;
     }
-
-    var newAPath = new Set([...aPath, a]);
-    var newBPath = new Set([...bPath, b]);
+    let newAPath = new Set([...aPath, a]);
+    let newBPath = new Set([...bPath, b]);
 
     if (a instanceof Array) {
         return compare3(a,b, (x, y) => compare(x,y, ignore, newAPath, newBPath) as number);
@@ -175,13 +174,13 @@ export function compare(a:any, b:any, ignore: Set<string> = new Set(), aPath:Set
 
     if (a instanceof Object && b instanceof Object) {
         let aKeys: string[] = [];
-        var bKeys: string[] = [];
+        let bKeys: string[] = [];
         for (var k in a) {
             if (a.hasOwnProperty(k)) {
                 aKeys.push(k);
             }
         }
-        for (var k in b) {
+        for (let k in b) {
             if (b.hasOwnProperty(k)) {
                 bKeys.push(k);
             }
@@ -193,9 +192,9 @@ export function compare(a:any, b:any, ignore: Set<string> = new Set(), aPath:Set
         if (res !== 0) {
             return res;
         }
-        var skiped = false;
-        for (var i = 0; i < aKeys.length; i++) {
-            var k = aKeys[i];
+        let skiped = false;
+        for (let i = 0; i < aKeys.length; i++) {
+            let k = aKeys[i];
             res = compare(a[k], b[k], ignore, newAPath, newBPath);
             if (res === undefined) {
                 skiped = true;
@@ -379,7 +378,7 @@ registerCompare(Map, (a: Map<any,any>, b: Map<any,any>, ignore: Set<any>, aPath:
         // I think we don't need to do anything special with key because
         // we define the lookup as same value zero equality otherwize we couldn't use a map
 
-        let bValue = b.get(a);
+        let bValue = b.get(key);
         let res = compare(aValue, bValue, ignore, aPath, bPath) as number;
         if (res !== 0) {
             return res;
@@ -529,6 +528,14 @@ export function getByParts(obj:{ [index: string]:any}, parts: string[]) : any {
     return cur;
 }
 
+export function toRecord(obj: Record<string, any>):Record<string, any> {
+    let res:Record<string, any> = {};
+    for (let k in obj) {
+        // note this can't check has own property
+        res[k] = obj[k];
+    }
+    return res;
+}
 
 export function clone<T>(obj:T, opt_used : WeakMap<any,any> = new WeakMap()) :T {
     return cloneRec_(obj, opt_used);

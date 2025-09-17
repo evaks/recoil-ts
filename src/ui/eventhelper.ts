@@ -1,6 +1,6 @@
 import {Behaviour} from "../frp/frp";
 import {WidgetScope} from "./widgets/widgetscope";
-import {EventType} from "./dom/eventType";
+import {EventType} from "./dom/eventtype";
 import {append, createDom, removeNode} from "./dom/dom";
 import {WidgetHelper} from "./widgethelper";
 
@@ -60,12 +60,22 @@ export class EventHelper<Type extends Event> {
         let l = existingListeners.pop();
         while (l) {
             l.unlisten();
+            l = existingListeners.pop();
         }
         for (let l of newListeners) {
             existingListeners.push(l);
         }
     }
 
+    /**
+     * unlistens to all the existingListeners, technically you can just call reregister with just
+     * the first parameter but I think that is a bit confusing
+     *
+     * @param existingListeners
+     */
+    static unregister(existingListeners: Unlistener[]) {
+        EventHelper.reregister(existingListeners);
+    }
     /**
      * @param callback the behaviour to set with the event
      **/
@@ -138,6 +148,9 @@ export class EventHelper<Type extends Event> {
         const listenFn = () => {
             if (!listening) {
                 listening = true;
+                if (type === "click") {
+                    console.log("listen", type, el)
+                }
                 el.addEventListener(type, callback as EventListenerOrEventListenerObject, options);
             }
         }
@@ -146,6 +159,9 @@ export class EventHelper<Type extends Event> {
             listen: listenFn,
             unlisten: () => {
                 if (listening) {
+                    if (type === "click") {
+                        console.log("unlisten", type, el)
+                    }
                     listening = false;
                     el.removeEventListener(type, callback as EventListenerOrEventListenerObject, options);
                 }
@@ -175,13 +191,18 @@ export class EventHandler {
     listen(el: EventTarget, type: EventType, callback: EventCallback, options?: boolean | AddEventListenerOptions): void {
         this.listeners_.add(EventHelper.listen(el, type, callback, options));
     }
+    listenCallback<T>(el: EventTarget, type: EventType, callback: Behaviour<any, any, any, any>, options?: boolean | AddEventListenerOptions): void {
+        this.listen(el, type, (e:any)=> {
+                callback.frp().accessTrans( () => callback.set(e), callback);
+            }, options);
+    }
 
     private static wrap(callback: EventCallback, test: () => boolean, scope: any): EventCallback {
         if (typeof callback === 'function') {
 
             return (evt: any) => {
                 if (test()) {
-                    callback.apply(scope, evt);
+                    (callback as any).apply(scope, evt);
                 }
             }
         } else {

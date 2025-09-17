@@ -1,7 +1,8 @@
-import {Message} from "./message";
+import {Message} from "./message.ts";
 
 export class Messages {
     static readonly AND = Message.getParamMsg(['first'], ' and ', ['second']);
+    static readonly COMMA = Message.getParamMsg(['first'], ', ', ['second']);
     static readonly OR = Message.getParamMsg(['first'], ' or ', ['second']);
     static readonly FIELD = Message.FIELD;
     static readonly NOT_APPLICABLE = Message.getParamMsg('N/A');
@@ -22,8 +23,11 @@ export class Messages {
     static readonly MIN_MAX = Message.getParamMsg('Min: ', ['min'], ', Max: ', ['max']);
     static readonly MIN_MAX_RANGES = Message.getParamMsg('In: ', ['ranges']);
     static readonly MIN_MAX_STEP = Message.getParamMsg('Min: ', ['min'], ', Max: ', ['max'], ', Step: ', ['step']);
+    static readonly MIN_STEP = Message.getParamMsg('Min: ', ['min'], ', Step: ', ['step']);
     static readonly MIN_TO_MAX = Message.getParamMsg(['min'], ' to ', ['max']);
+    static readonly MIN_0 = Message.getParamMsg('Min: ', ['min']);
     static readonly MIN_MAX_RANGES_STEP = Message.getParamMsg('In: ', ['ranges'], ', Step: ', ['step']);
+    static readonly CANNOT_BE_EMPTY = Message.getParamMsg('Cannot be empty');
     static readonly INVALID_VALUE = Message.getParamMsg('Invalid Value');
     static readonly __UNKNOWN_VAL = Message.getParamMsg('?');
     static readonly UNKNOWN_VAL = Message.getParamMsg('Unknown ', ['val']);

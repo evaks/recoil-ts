@@ -231,6 +231,7 @@ const exportsFns  = {
   enable, enableAll,remove, removeAll, add, addAll, contains,
   toggle,
   addRemove, swap,
+  setAll
 }
 
 export default  exportsFns;

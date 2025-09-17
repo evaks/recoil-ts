@@ -6,5 +6,5 @@ export enum IPAddressType  {
     ipv4= 'ipv4-address'
 }
 
-export type IPAddress = {type:IPAddressType.ipv6, value:IPv4Address}|{type:IPAddressType.ipv4, value:IPv6Address};
+export type IPAddress = {type:IPAddressType.ipv6, value:IPv6Address}|{type:IPAddressType.ipv4, value:IPv4Address};
 

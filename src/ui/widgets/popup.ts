@@ -1,13 +1,3 @@
-goog.provide('recoil.ui.widgets.PopupWidget');
-
-goog.require('goog.dom');
-goog.require('goog.positioning.AnchoredViewportPosition');
-goog.require('goog.ui.Container');
-goog.require('goog.ui.Popup');
-goog.require('recoil.ui.ComponentWidgetHelper');
-goog.require('recoil.ui.Widget');
-goog.require('recoil.ui.WidgetScope');
-
 /**
  *
  * @template T

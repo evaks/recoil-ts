@@ -1,4 +1,4 @@
-import {AvlTree} from "./avltree";
+import {AvlTree} from "./avltree.ts";
 
 
 /**

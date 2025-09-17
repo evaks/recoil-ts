@@ -1,5 +1,6 @@
-import {Behaviour, BehaviourList, BStatus, Frp, isStatus, Status} from "./frp";
-import {addProps, uniq} from "../util/object";
+import {Behaviour, type BehaviourList, BStatus, Frp, isStatus, type Status} from "./frp.ts";
+import {addProps, uniq} from "../util/object.ts";
+import {ColumnKey} from "../structs/table/columnkey.ts";
 
 export const FLATTEN = Symbol("flatten");
 export const NO_FLATTEN = uniq();
@@ -9,6 +10,22 @@ export type StructBehaviour = Behaviour<StructType>;
 export type StructBehaviourOrType = StructType|StructBehaviour;
 export type StructBehaviourOrTypeList = StructBehaviourOrType[];
 export type BehaviourOrType<T> = T|Behaviour<T>
+export type AttachType<T extends Record<string, any>> = T|Behaviour<T>|{
+    [K in keyof T]: T[K] | Behaviour<T[K]>;
+}
+export type NullRecordType<T extends Record<string, any>> = {
+    [K in keyof T]: null;
+}
+
+export type AttachCallbackType<CbT extends Record<string, any>, T extends Record<string, any>> = T|Behaviour<T & NullRecordType<CbT>>|({
+    [K in keyof T]: T[K] | Behaviour<T[K]>;
+} & {
+    [K in keyof CbT]: Behaviour<null, CbT[K], null, null>;
+})
+
+export type WrapInColumnKey<T extends any[]> = {
+    [K in keyof T]: T[K] extends any ? ColumnKey<T[K]> : never;
+}
 /**
  * @template T,O
  * @param name the attribute name of the element to get out of the struct
@@ -77,14 +94,13 @@ export function getSubset<T>(value:StructBehaviour, defs:StructType, opt_lift?:(
 
 /**
  * gets struct value, but will return a result even if the behaviour is not ready, or good
- * @todo rename this to safeGet
  *
  * @param name the attribute name of the element to get out of the struct
  * @param value the structure to get it out of
  * @param opt_default
  * @return 
  */
-export function getMeta<T>(name:string, value:StructBehaviour, opt_default?:T): Behaviour<T> {
+export function getWithStatusIfNotGood<T>(name:string, value:StructBehaviour, opt_default?:T): Behaviour<T> {
    return value.frp().metaLiftBI(() => {
        let val = value.get();
        let res = val ? val[name] : undefined;
@@ -109,7 +125,7 @@ export function getMeta<T>(name:string, value:StructBehaviour, opt_default?:T): 
  * @param var_extensionsB
  * @return
  */
-export function extend(frp:Frp, structB:StructBehaviour|StructType, ...var_extensionsB:StructBehaviourOrTypeList ) {
+export function extend(frp:Frp, structB:StructBehaviour|StructType, ...var_extensionsB:StructBehaviourOrTypeList ):Behaviour<StructType> {
 
     const calc = (...args:any[]):StructType=> {
         let res = {};

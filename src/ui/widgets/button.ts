@@ -3,25 +3,24 @@ import {WidgetScope} from "./widgetscope";
 import {createDom, getCssName, removeNode} from "../dom/dom";
 import {TagName} from "../dom/tags";
 import {EventHelper} from "../eventhelper";
-import {EventType} from "../dom/eventType";
 import {WidgetHelper} from "../widgethelper";
-import {enable, set, setAll} from "../dom/classlist";
-import {BoundOptionsType, Options, OptionsType} from "../frp/util";
+import {enable, setAll} from "../dom/classlist";
+import {AttachableWidget, getGroup, Options} from "../frp/util";
 import {BoolWithExplanation} from "../booleanwithexplain";
 import {Behaviour, Frp} from "../../frp/frp";
-import {BehaviourOrType, StructBehaviourOrType} from "../../frp/struct";
 import {Message} from "../message";
+import {EventType} from "../dom/eventtype.ts";
+import {EnabledTooltipHelper} from "../tooltiphelper.ts";
+import {AttachCallbackType} from "../../frp/struct.ts";
 
 export type AniFunc = (container:HTMLElement, position:{x: number, y: number, height: number, width: number}, progress:number) => void;
 
-class ButtonWidget extends Widget {
-    private scope_: WidgetScope;
-    private button_: HTMLButtonElement;
-    private confirmDiv_: HTMLElement;
-    private helper_: WidgetHelper;
+export class ButtonWidget extends Widget implements AttachableWidget {
+    private readonly button_: HTMLButtonElement;
+    private readonly confirmDiv_: HTMLElement;
+    private readonly helper_: WidgetHelper;
     private downTime_: null|number;
     private aniId_: any;
-    private valueB_: Behaviour<any, MouseEvent, any, any >|undefined;
     private enabledB_ :Behaviour<BoolWithExplanation>|undefined;
     private classesB_:Behaviour<string[]>|undefined;
     private textB_:Behaviour<string|Message>|undefined;
@@ -30,6 +29,7 @@ class ButtonWidget extends Widget {
     private callbackB_: Behaviour<any, MouseEvent>|undefined;
     private cssBaseB_: Behaviour<string>|undefined;
     private confirmInfoB_?: Behaviour<{confirm:number, confirmAni:AniFunc}>;
+    private readonly enabledHelper_: EnabledTooltipHelper;
 
     /**
      *
@@ -38,8 +38,7 @@ class ButtonWidget extends Widget {
      * that
      */
     constructor(scope:WidgetScope, longEvent?: boolean) {
-        super();
-        this.scope_ = scope;
+        super(scope, createDom(TagName.DIV));
         this.frp_ = scope.getFrp();
         this.button_ = createDom(TagName.BUTTON, {}, "?") as HTMLButtonElement;
         // used to do spinning widget on confirm dialogs
@@ -47,32 +46,37 @@ class ButtonWidget extends Widget {
         this.aniId_ = null;
         this.downTime_ = null;
 
-
-        // @todo this is needed otherwize disabled button don't show tooltips
+        // @todo this is needed otherwise disabled button don't show tooltips
         //this.component_.getElement().setAttribute('class', 'recoil-button-tooltip-padding');
-        this.element.appendChild(this.button_);
+        this.element_.appendChild(this.button_);
         //        this.enabledHelper_ = new recoil.ui.TooltipHelper(scope, this.button_, this.component_.getElement(), function(enabled) {});
 
-        this.helper_ = new WidgetHelper(scope, this.button_, this, this.updateState_, ()=> this.stopAnimation_());
+        this.helper_ = new WidgetHelper(scope, this.button_, this, this.updateState_, {detach: ()=> this.stopAnimation_(), attach: () => {}});
         this.changeHelper_ = new EventHelper(scope, this.button_, EventType.CLICK, undefined, longEvent);
+        this.enabledHelper_ = new EnabledTooltipHelper(scope, this.getElement(), this.getElement());
 
         EventHelper.listenAll(this.button_, [
             EventType.MOUSEUP,
             EventType.MOUSEDOWN,
             EventType.MOUSELEAVE
-        ], scope.getFrp().accessTransFunc((e:MouseEvent) => {
-            if (!this.confirmInfoB_|| !this.confirmInfoB_.good()) {
+        ], (e:MouseEvent) => {
+            if (!this.confirmInfoB_) {
                 return;
             }
-            if (this.confirmInfoB_.get().confirm) {
-                if (e.type === 'mousedown' && e.button === 0 && this.enabledB_?.get().val()) {
-                    this.startAnimation_();
-                } else if (e.type === 'mouseleave') {
-                    this.stopAnimation_();
+            scope.getFrp().accessTrans(() => {
+                if (!this.confirmInfoB_|| !this.confirmInfoB_.good()) {
+                    return;
                 }
-            }
+                if (this.confirmInfoB_.get().confirm) {
+                    if (e.type === 'mousedown' && e.button === 0 && this.enabledB_?.get().val()) {
+                        this.startAnimation_();
+                    } else if (e.type === 'mouseleave') {
+                        this.stopAnimation_();
+                    }
+                }
 
-        }, ...[this.confirmInfoB_, this.enabledB_].filter(v => !!v)))
+            }, ...[this.confirmInfoB_, this.enabledB_].filter(v => !!v));
+        });
     }
 
     private startAnimation_() {
@@ -142,28 +146,23 @@ class ButtonWidget extends Widget {
 
     }
 
-    /**
-     * @param {!Object| !recoil.frp.Behaviour<Object>} value
-     */
-    attachStruct(value:{
-        value: Behaviour<any,MouseEvent, any, any>,
-        text:BehaviourOrType<string>,
-        classes?: BehaviourOrType<string[]>,
-        tooltip?:BehaviourOrType<null|Message>,
-        confirmAni?: BehaviourOrType<AniFunc>,
-        confirm?: BehaviourOrType<number>, // time needed for confirmation in ms
-
-    } | Behaviour<{value: any, text:string, classes?:string[], tooltip?:null|Message, confirmAni?:AniFunc, confirm?:number}>) {
+    attachStruct(value: AttachCallbackType<{value:MouseEvent},{
+        text:string|Message,
+        enabled?: BoolWithExplanation,
+        classes?: string[],
+        confirmAni?: AniFunc,
+        confirm?: number, // time needed for confirmation in ms
+        tooltip?: Message,
+    }>) {
 
         let frp = this.helper_.getFrp();
         let bound = ButtonWidget.options.bind(frp, value);
-
 
         this.cssBaseB_ = bound.cssBase();
         const enabledB =  bound.enabled()  as Behaviour<BoolWithExplanation>;
         const editableB =  bound.editable() as Behaviour<boolean>;
         const callbackB = bound.value();
-        this.confirmInfoB_ = bound.getGroup(['confirm', 'confirmAni']);
+        this.confirmInfoB_ = bound[getGroup](['confirm', 'confirmAni']);
 
         this.enabledB_ = BoolWithExplanation.and(
             frp,
@@ -184,7 +183,7 @@ class ButtonWidget extends Widget {
         }, callbackB, this.enabledB_, this.confirmInfoB_);
 
         this.classesB_ = frp.liftB((cls, enabled)=> {
-            var res = [];
+            let res = [];
             if (!enabled.val()) {
                 res.push('recoil-button-disabled');
             }
@@ -193,11 +192,11 @@ class ButtonWidget extends Widget {
         }, bound.classes(), this.enabledB_);
 
         this.textB_ = bound.text();
-        this.helper_.attach(this.textB_ as Behaviour<string|Message>, this.callbackB_, this.enabledB_, this.classesB_, this.confirmInfoB_);
+        this.helper_.attach(this.textB_ as Behaviour<string|Message>, this.callbackB_, this.enabledB_, this.classesB_, this.confirmInfoB_, this.cssBaseB_);
         this.enabledHelper_.attach(this.enabledB_, this.helper_);
         this.changeHelper_.listen(this.callbackB_);
     }
-    static options = Options('action', 'text', {
+    static options = Options('value', 'text', {
         cssBase: 'recoil-',
         enabled: BoolWithExplanation.TRUE,
         editable: true,
@@ -207,13 +206,7 @@ class ButtonWidget extends Widget {
         confirmAni: ButtonWidget.defaultConfirmAni
     });
 
-
-    /**
-     *
-     * @param {recoil.ui.WidgetHelper} helper
-     * @privateg
-     */
-    updateState_ (helper:WidgetHelper) {
+    updateState_ () {
         if (this.button_ &&this.textB_) {
             if (this.textB_.good()) {
                 let text = this.textB_.get();
@@ -227,7 +220,7 @@ class ButtonWidget extends Widget {
             if (!this.helper_.isGood()) {
                 classes.push(getCssName(this.cssBaseB_, 'button-disabled'));
             }
-            setAll(this.element, classes);
+            setAll(this.element_, classes);
         }
     }
 }

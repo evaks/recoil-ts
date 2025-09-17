@@ -1,7 +1,3 @@
-goog.provide('recoil.ui.widgets.MenuStructure');
-
-goog.require('recoil.ui.widgets.MenuButtonWidget');
-
 /**
  *
  * @param {!recoil.ui.WidgetScope} scope

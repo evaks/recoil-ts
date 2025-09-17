@@ -1,8 +1,8 @@
 import {EventHelper} from "./eventhelper";
-import {EventType} from "./dom/eventType";
 import {Frp} from "../frp/frp";
 import {createDom} from "./dom/dom";
 import {WidgetScope} from "./widgets/widgetscope";
+import {EventType} from "./dom/eventtype.ts";
 
 test("listen", () => {
     let frp = new Frp();

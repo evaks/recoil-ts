@@ -3,19 +3,32 @@ import {
     flattenMeta,
     get,
     getSubset,
-    StructBehaviour,
-    StructBehaviourOrType,
-    StructType
-} from "../../frp/struct";
+    type StructBehaviour,
+    type StructBehaviourOrType,
+    type StructType
+} from "../../frp/struct.ts";
 
-import {Behaviour, Frp} from "../../frp/frp";
-import struct from "../../frp/struct";
+import {Behaviour, Frp} from "../../frp/frp.ts";
+import * as struct from "../../frp/struct.ts";
+import {Messages} from "../messages.ts";
+import {BoolWithExplanation} from "../booleanwithexplain.ts";
+import {Message} from "../message.ts";
 
-interface AttachableWidget {
+export interface AttachableWidget {
     attachStruct(val: StructBehaviourOrType):void
 }
 
 type RemainingType = { [index: string]: (string | StructType) };
+
+type OptionToShape<T> =
+    T extends string ? { [K in T]: any } :
+        T extends Record<string, any> ? { [K in keyof T]?: T[K] } :
+            never;
+
+type MergeShapes<T extends any[]> =
+    T extends [infer Head, ...infer Tail]
+        ? OptionToShape<Head> & MergeShapes<Tail>
+        : {};
 
 
 function forEachParam(args:(StructType|string)[], cb:(param:string, def:StructType) => void) {
@@ -27,29 +40,41 @@ function forEachParam(args:(StructType|string)[], cb:(param:string, def:StructTy
         }
     }
 }
+
 const DATA = Symbol("DATA");
-export class BoundOptionsType {
+export const getGroup = Symbol("getGroup");
+const REMAINING = Symbol("remaining");
+const STRUCT = Symbol("struct");
+
+type BondRecordType<T extends Record<string, any>> = {
+    [K in keyof T]: ()=> Behaviour<T[K]>;
+}
+export class BoundOptionsType<Type extends Record<string, any>> {
+
     [index: string]: () => Behaviour<any>;
     [DATA]:{ optionsB: StructBehaviour, params: (string|StructType)[] };
 
     constructor(params:(string|StructType)[],optionsB: StructBehaviour) {
         this[DATA] = {optionsB,params};
     }
-
     /**
      * get all the fields specified fields as a struct, the main use
      * of this is to reduce amount of behaviours in the system as opposed to breaking up
      * each
-     * @template T
-     * @param {!Array} fields
-     * @param {function(Object):T=} opt_lift lift function you could do this with a liftB however
+     * @param fields the fields in the group
+     * @param opt_lift lift function you could do this with a liftB however
      * since we are trying to reduce behaviours I have added it
-     * @param {function(T):!Object=} opt_inv
-     * @return {!recoil.frp.Behaviour<T>}
+     * @param  opt_inv
+     * @return
      */
-    getGroup<T>(fields:string[], opt_lift?:(v:StructType) => T, opt_inv?: (v:T) => StructType): Behaviour<T> {
+    [getGroup]<T>(fields:(string|(() => any))[], opt_lift?:(v:StructType) => T, opt_inv?: (v:T) => StructType): Behaviour<T> {
         let defs: StructType = {};
         const data = this[DATA];
+        let revFnMap = new Map<any,string>();
+        for (let k in this) {
+            revFnMap.set(this[k], k);
+        }
+        fields = fields.map(field => revFnMap.get(field) || field);
         forEachParam(data.params, (param, def) =>{
             for (let field of fields) {
                 if (param === field) {
@@ -64,27 +89,27 @@ export class BoundOptionsType {
 }
 
 export class UnboundOptionsType {
-    private setFunctions: Map<string, (...args: any[]) => UnboundOptionsType>;
-    private struct_: StructType;
+    private readonly [STRUCT]: StructType;
+    private readonly [REMAINING]: RemainingType;
 
     [key: string]: any;
 
     constructor(remaining: RemainingType, struct: StructType, setFunctions: Map<string, (...args: any[]) => UnboundOptionsType>) {
-        this.setFunctions = setFunctions;
-        this.struct_ = struct;
+        this[REMAINING] = remaining;
+        this[STRUCT] = struct;
         for (let [key, value] of setFunctions) {
             this[key] = value;
         }
     }
 
     struct(): StructType {
-        checkRemaining(this.remaining);
-        return this.struct_;
+        checkRemaining(this[REMAINING]);
+        return this[STRUCT];
     }
 
     attach(widget: AttachableWidget) {
-        checkRemaining(this.remaining);
-        widget.attachStruct(this.struct_);
+        checkRemaining(this[REMAINING]);
+        widget.attachStruct(this[STRUCT]);
     }
 
 
@@ -92,8 +117,9 @@ export class UnboundOptionsType {
 }
 
 
-export class OptionsType extends UnboundOptionsType {
-    private args: (string | StructType)[];
+
+export class OptionsType<Type extends Record<string, any>> extends UnboundOptionsType {
+    private readonly args: (string | StructType)[];
 
     constructor(remaining: RemainingType, struct: StructType,
                 setFunctions: Map<string, (...args: any[]) => UnboundOptionsType>,
@@ -102,19 +128,13 @@ export class OptionsType extends UnboundOptionsType {
         this.args = args;
     }
 
-    /**
-     *
-     * @param {!recoil.frp.Frp} frp
-     * @param {!recoil.frp.Behaviour<!Object>|!Object} val
-     * @return {!Object<string,?>}
-     */
-    bind(frp: Frp, val:StructBehaviourOrType) {
+    bind(frp: Frp, val:StructBehaviourOrType):BoundOptionsType<Type> {
         let optionsB = flatten(frp, val);
         optionsB.setName('bindOptionsB');
         let res = new BoundOptionsType(this.args, optionsB);
 
         forEachParam(this.args, (param, def)=> {
-            res[param] = function () {
+            res[param] = ()=> {
                 return get(param, optionsB, def);
             };
         });
@@ -123,10 +143,6 @@ export class OptionsType extends UnboundOptionsType {
 
     /**
      * will just return behaviour will all the values
-     *
-     * @param {!recoil.frp.Frp} frp
-     * @param {!recoil.frp.Behaviour<!Object>|!Object} val
-     * @return {!recoil.frp.Behaviour<!Object>}
      */
     bindAll(frp: Frp, val: StructBehaviourOrType): Behaviour<StructType> {
         let optionsB = flatten(frp, val);
@@ -147,21 +163,15 @@ export class OptionsType extends UnboundOptionsType {
         }, optionsB);
     }
 
-    /**
-     *
-     * @param {!recoil.frp.Frp} frp
-     * @param {!recoil.frp.Behaviour<!Object>|!Object} val
-     * @return {!Object}
-     */
-    bindKeepMeta(frp: Frp, val: StructBehaviourOrType): {[index:string]: (() => any)} {
+    bindWithStatusIfNotGood(frp: Frp, val: StructBehaviourOrType): BoundOptionsType<StructType> {
         let optionsB = flattenMeta(frp, val);
-        let res:{[index:string]: (() => any)} = {};
+        let res=  new BoundOptionsType(this.args, optionsB);
         for (let name of this.args) {
 
             for (let func of makeFunctionParams(name)) {
                 for (let param of func.params) {
-                    res[param] = function () {
-                        return struct.getMeta(param, optionsB, func.def[param]);
+                    res[param] = ()=> {
+                        return struct.getWithStatusIfNotGood(param, optionsB, func.def[param]);
                     }
                 }
             }
@@ -173,9 +183,10 @@ export class OptionsType extends UnboundOptionsType {
 }
 
 function checkRemaining(remaining: any) {
-    for (var i in remaining) {
-        if (!(remaining[i] instanceof Object)) {
-            throw 'missing argument';
+    for (let name in remaining) {
+        let r = remaining[name];
+        if (!(r instanceof Object)) {
+            throw Error('missing argument');
         }
     }
 
@@ -189,7 +200,7 @@ function mkSetFunc(inStruct: StructType, inRemaining: RemainingType, name:any, p
         delete remaining[name];
 
         if (name instanceof Object) {
-            for (var n in name) {
+            for (let n in name) {
                 struct[n] = var_vals;
             }
         } else {
@@ -249,21 +260,19 @@ function mkSetFunc(inStruct: StructType, inRemaining: RemainingType, name:any, p
  *               the values, you can either specify multiple keys in 1 object or multiple object parameters.
  *               To specify defaults of functions (type 2) the default should be an object with fields matching the parameters
  *
- * @param {...(string|!Object)} var_options
- * @return {!recoil.frp.Util.OptionsType} this has dynamic fields based on the parameters, and struct, attach, and bind function
+ * @param  options
+ * @return this has dynamic fields based on the parameters, and struct, attach, and bind function
  *
  */
 
-export function Options(...options: (string | StructType)[]) : OptionsType {
+export function Options<T extends (string | Record<string, any>)[]>(...options: (string | StructType)[]) : OptionsType<MergeShapes<T>> {
     let remaining: RemainingType = {};
-    let k = 0;
-
     let getFunctions = new Map<string, (...args: any[]) => UnboundOptionsType>();
 
 
-    let setFuctions = new Map<string, any>();
+    let setFunctions = new Map<string, any>();
     for (let option of options) {
-        for (let func of makeFunctionParams(options)) {
+        for (let func of makeFunctionParams(option)) {
             remaining[func.name] = option;
         }
     }
@@ -271,12 +280,57 @@ export function Options(...options: (string | StructType)[]) : OptionsType {
     // of remaining, if we do it first the clone will not be correct
 
     for (let option of options) {
-        for (let func of makeFunctionParams(options)) {
-            getFunctions.set(func.name, mkSetFunc({}, remaining, func.name, func.params));
+        for (let func of makeFunctionParams(option)) {
+            setFunctions.set(func.name, mkSetFunc({}, remaining, func.name, func.params));
         }
     }
 
-    return new OptionsType({}, remaining, setFuctions, options);
+    return new OptionsType({}, remaining, setFunctions, options);
+}
+
+
+/**
+ * @see recoil.frp.Util.Options
+ * like the frp util option but puts in some standard options by default
+ *
+ * the following are the current opptions that are added,editable
+ *   enabled recoil.ui.BoolWithExplanation the reason this is a boolwith explanation, is that I want the user to be reminded to think
+ *     about providing the users a reason as to why something is disabled
+ *   tooltip recoil.ui.message type the reason this is a message and not a string, is because I want to force, the user to use a message
+ *     for language portablity
+ *
+ *
+ * @param {...(string|!Object)} var_options
+ * @return {!recoil.frp.Util.OptionsType} this has dynamic fields based on the parameters, and struct, attach, and bind function
+ *
+ */
+export function StandardOptions<T extends (string | Record<string, any>)[]>(...options: T):OptionsType<MergeShapes<T & {
+    editable:boolean,
+    tooltip: string| Message,
+    enabled: BoolWithExplanation,
+}>> {
+    let args = [{
+        editable: true,
+        tooltip: Messages.BLANK,
+        enabled: BoolWithExplanation.TRUE
+    }];
+    return Options(...[...args, ...options]);
+}
+
+export function getStandardOptionsGroup<T, BoundT extends (string | Record<string, any>)[] = any[]>(bound: BoundOptionsType<BoundT>, fields:(string|(() => any))[], opt_lift?:(v:StructType) => T, opt_inv?: (v:T) => StructType):Behaviour<T & {
+    enabled:BoolWithExplanation, editable: boolean, tooltip:Message|string}> {
+  return bound[getGroup](fields.concat([bound.enabled, bound.tooltip, bound.editable]), opt_lift, opt_inv) as any;
+}
+export type StandardOptionsType = {
+    editable?: boolean;
+    tooltip?: Message,
+    enabled?: BoolWithExplanation;
+}
+
+export type StandardOptionsBoundType = {
+    editable: boolean;
+    tooltip: Message,
+    enabled: BoolWithExplanation;
 }
 
 type ParamInfo = { name: string, params: string[], def: StructType };

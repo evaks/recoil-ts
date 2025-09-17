@@ -1,0 +1,52 @@
+<html  title="test" lang="en">
+<head>
+    <script language="javascript" src=""></script>
+    <style>
+        .normal-checkbox {
+            width: 1.2em;
+            height: 1.2em;
+            border: 1px solid #333;
+            border-radius: 3px;
+            position: relative;
+            cursor: pointer;
+            vertical-align: middle;
+        }
+        .question-checkbox {
+            appearance: none;
+            -webkit-appearance: none;
+            width: 1.2em;
+            height: 1.2em;
+            border: 1px solid #666;
+            border-radius: 3px;
+            position: relative;
+            cursor: pointer;
+            vertical-align: middle;
+        }
+        .question-checkbox:checked::after {
+            content: "?";
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -55%);
+            font-size: 14px;
+            font-weight: bold;
+            color: #666;
+            font-family: sans-serif;
+
+        }
+    </style>
+    <script>
+        console.log("hi");
+        </script>
+    <script type="application/typescript">
+        console.log("hi");
+        import {format} from "date-fns";
+        const elem = document.getElementById("date") as HTMLTableCellElement;
+        elem.innerText = format(Date.now(), "MM/dd/yyyy");
+    </script>
+</head>
+<body>
+<input class="question-checkbox" id="check" type="checkbox"/>
+<input class="normal-checkbox" type="checkbox"/>
+</body>
+</html>

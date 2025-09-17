@@ -62,7 +62,7 @@ export enum TagName {
     I ='I', 
     IFRAME ='IFRAME', 
     IMG ='IMG', 
-    INPUT ='INPUT', 
+    INPUT ='INPUT',
     INS ='INS', 
     ISINDEX ='ISINDEX', 
     KBD ='KBD', 
@@ -127,4 +127,22 @@ export enum TagName {
     VIDEO ='VIDEO', 
     WBR = 'WBR',
 }
+
+export type TagTypeMap = {
+    DIV: HTMLDivElement,
+    INPUT: HTMLInputElement,
+    SPAN: HTMLSpanElement,
+    TABLE: HTMLTableElement,
+    TR: HTMLTableRowElement,
+    TD: HTMLTableCellElement,
+    BUTTON: HTMLButtonElement,
+    BODY: HTMLBodyElement,
+    IFRAME: HTMLIFrameElement,
+    STYLE: HTMLStyleElement,
+    HEAD: HTMLHeadingElement,
+}
+type CaseInsensitiveKey<K extends string> = Uppercase<K>;
+
+export type TagTypeLookup<T extends string> =
+    CaseInsensitiveKey<T> extends keyof TagTypeMap ? TagTypeMap[CaseInsensitiveKey<T>] : Element;
 

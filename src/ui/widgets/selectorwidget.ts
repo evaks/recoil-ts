@@ -1,237 +1,239 @@
-goog.provide('recoil.ui.widgets.SelectorWidget');
-goog.require('goog.ui.Container');
-goog.require('goog.ui.Control');
-goog.require('goog.ui.MenuItem');
-goog.require('goog.ui.Select');
-goog.require('recoil.frp.Behaviour');
-goog.require('recoil.frp.Debug');
-goog.require('recoil.frp.Util');
-goog.require('recoil.ui.BoolWithExplanation');
-goog.require('recoil.ui.ComponentWidgetHelper');
-goog.require('recoil.ui.EventHelper');
-goog.require('recoil.ui.TooltipHelper');
-goog.require('recoil.ui.Widget');
-goog.require('recoil.ui.widgets.LabelWidget');
-goog.require('recoil.util');
+import {Widget} from "./widget.ts";
+import {WidgetScope} from "./widgetscope.ts";
+import {createDom, getElement, setElementShown} from "../dom/dom.ts";
+import {TagName} from "../dom/tags.ts";
+import {BoolWithExplanation} from "../booleanwithexplain.ts";
+import {getGroup, StandardOptions, StandardOptionsType} from "../frp/util.ts";
+import {WidgetHelper} from "../widgethelper.ts";
+import { isEqual } from "../../util/object.ts";
+import {AttachType} from "../../frp/struct.ts";
+import {Behaviour} from "../../frp/frp.ts";
+import {Label} from "./label.ts";
+import {EventType} from "../dom/eventtype.ts";
+import {EventHandler} from "../eventhelper.ts";
+import {EnabledTooltipHelper} from "../tooltiphelper.ts";
 
-/**
- *
- * @template T
- * @param {!recoil.ui.WidgetScope} scope
- * @implements {recoil.ui.Widget}
- * @constructor
- */
-recoil.ui.widgets.SelectorWidget = function(scope) {
-    this.scope_ = scope;
-    var frp = this.scope_.getFrp();
-    this.container_ = new goog.ui.Container();
-    this.readOnlyWidget_ = new recoil.ui.widgets.LabelWidget(scope);
-    this.selector_ = new goog.ui.Select(undefined, undefined, undefined, undefined, undefined, function(item) {
-        var struct = item.getValue();
-        return new struct.renderer(struct.value, struct.valid, struct.enabled);
+export type RendererFn<Type> =  (obj:Type, valid:boolean, enabled:BoolWithExplanation)=>Element;
 
-    });
-    // this is to stop leaking dom elements otherwise every time
-    // we open a menu it will add the menu to the root document that will
-    // not get destroyed unless we manage it ourselves
-    this.selector_.setRenderMenuAsSibling(true);
+export class SelectorWidget<Type> extends Widget {
 
-    this.selector_.setScrollOnOverflow(true);
+    private configB_?: Behaviour<{
+        name: string,
+        value: Type,
+        list: Type[],
+        enabledItems: BoolWithExplanation[],
+        renderer: RendererFn<Type>,
 
-    this.container_.addChild(this.selector_, true);
-    this.container_.addChild(this.readOnlyWidget_.getComponent(), true);
-    this.helper_ = new recoil.ui.ComponentWidgetHelper(scope, this.selector_, this, this.updateState_);
-    // this.changeHelper_ = new recoil.ui.EventHelper(scope, this.selector_, goog.ui.Component.EventType.ACTION);
-    this.changeHelper_ = new recoil.ui.EventHelper(scope, this.selector_, goog.ui.Component.EventType.CHANGE);
-    this.enabledHelper_ = new recoil.ui.TooltipHelper(scope, this.selector_, this.container_.getElement());
-};
+    } & StandardOptionsType>
+    private valueB_?: Behaviour<Type>;
+    private readonly selected_: HTMLDivElement;
+    private readonly options_: HTMLDivElement;
+    private readonly helper_: WidgetHelper;
+    private eventHandler_: EventHandler;
+    private readonly  readonly_ : HTMLDivElement;
+    private readonly enabledHelper_: EnabledTooltipHelper;
 
+    constructor(scope: WidgetScope) {
+        super(scope, createDom(TagName.DIV, {class: 'recoil-select'}));
+        this.selected_ = createDom(TagName.DIV, {class: 'recoil-select-selected'});
+        this.options_ = createDom(TagName.DIV, {class: 'recoil-select-options'});
+        this.readonly_ = createDom(TagName.DIV, {class: 'recoil-select-readonly'});
 
-/**
- * this has to come before options
- *
- * @param {?} obj
- * @param {boolean} valid
- * @param {!recoil.ui.BoolWithExplanation} enabled
- * @return {!Element}
- * @constructor
- */
-recoil.ui.widgets.SelectorWidget.RENDERER = function(obj, valid, enabled) {
-    if (typeof(obj) === 'number') {
-        obj = '' + obj;
+        const frp = scope.getFrp();
+
+        // todo test removing and then menu hide
+
+        this.getElement().appendChild(this.readonly_);
+        this.getElement().appendChild(this.selected_);
+        this.getElement().appendChild(this.options_);
+
+        this.selected_.addEventListener(EventType.CLICK, () => {
+            this.options_.style.display = this.options_.style.display === "block" ? "none" : "block";
+        });
+        this.eventHandler_ = new EventHandler();
+        this.helper_ = new WidgetHelper(scope, this.getElement(), this, this.updateState_, {detach:() => this.eventHandler_.unlisten(), attach:this.attachListeners_});
+        this.enabledHelper_ = new EnabledTooltipHelper(scope, this.selected_);
     }
-    if (enabled && enabled.reason && enabled.reason()) {
-        if (enabled.reason().toString().trim() !== '') {
-            return goog.dom.createDom('div', {disabled: true, class: valid ? 'recoil-select-disabled' : 'recoil-error', title: enabled.reason().toString()}, obj);
+
+    private attachListeners_() {
+        this.eventHandler_.listen(this.options_,EventType.CLICK, (e:MouseEvent) => {
+            if (!e.target) {
+                return;
+            }
+
+            const option = e.target.closest(".option");
+            if (option) {
+                this.selected.innerHTML = option.innerHTML; // copy arbitrary HTML
+                selected.dataset.value = option.dataset.value;
+                options.style.display = "none";
+                console.log("Selected value:", option.dataset.value);
+            }
+        });
+        this.eventHandler_.listen(document, EventType.CLICK, (e:MouseEvent) => {
+            if (!select.contains(e.target)) {
+                options.style.display = "none";
+            }
+        });
+
+    }
+
+    /**
+     * this has to come before options
+     *
+     * @param {?} obj
+     * @param {boolean} valid
+     * @param {!recoil.ui.BoolWithExplanation} enabled
+     * @return {!Element}
+     * @constructor
+     */
+    static RENDERER<Type extends number | string>(obj: Type, valid: boolean, enabled: BoolWithExplanation): Element {
+        if (typeof (obj) === 'number') {
+            obj = '' + obj;
         }
+        if (enabled && enabled.reason && enabled.reason()) {
+            if (enabled.reason()!.toString().trim() !== '') {
+                return createDom('div', {
+                    disabled: true,
+                    class: valid ? 'recoil-select-disabled' : 'recoil-error',
+                    title: enabled.reason()!.toString()
+                }, obj);
+            }
+        }
+
+        return createDom(TagName.DIV, valid ? undefined : 'recoil-error', obj);
+
     }
 
-    return goog.dom.createDom('div', valid ? undefined : 'recoil-error', obj);
-
-};
-/**
- * list of functions available when creating a selectorWidget
- */
+    /**
+     * list of functions available when creating a selectorWidget
+     */
 // recoil.ui.widgets.SelectorWidget.options =  recoil.util.Options('value' , {'!list': [1, 2, 3]}, {'renderer' : recoil.util.widgets.RENDERER},
 //     { renderers :['button', 'menu']}, 'enabledItems');
-recoil.ui.widgets.SelectorWidget.options = recoil.frp.Util.Options(
-    {
-        'name' : '',
-        'renderer': recoil.ui.widgets.SelectorWidget.RENDERER,
-        'enabledItems' : [],
-        'editable': true,
-        'enabled' : recoil.ui.BoolWithExplanation.TRUE
-    },
-    'value' , 'list');
+    static options = StandardOptions({
+        'name': '',
+        'renderer': SelectorWidget.RENDERER,
+        'enabledItems': [],
+    }, 'value', 'list');
 
-/**
- *
- * @return {!goog.ui.Component}
- */
-recoil.ui.widgets.SelectorWidget.prototype.getComponent = function() {
-    return this.container_;
-};
 
-/**
- * @param {recoil.frp.Behaviour<string>|string} nameB
- * @param {recoil.frp.Behaviour<!T>|!T} valueB
- * @param {recoil.frp.Behaviour<!Array<T>>|Array<T>} listB
- * @param {recoil.frp.Behaviour<!recoil.ui.BoolWithExplanation>|!recoil.ui.BoolWithExplanation=} opt_enabledB
- * @param {recoil.frp.Behaviour<function(T) : string>| function(T) : string=} opt_rendererB
- * @param {recoil.frp.Behaviour<!Array<recoil.ui.BoolWithExplanation>>=} opt_enabledItemsB
- */
-recoil.ui.widgets.SelectorWidget.prototype.attach = function(nameB, valueB, listB, opt_enabledB, opt_rendererB, opt_enabledItemsB) {
-    this.attachStruct({name: nameB, value: valueB, list: listB, enabled: opt_enabledB, renderer: opt_rendererB, enabledItems: opt_enabledItemsB});
-};
-
-/**
- * @param {!Object| !recoil.frp.Behaviour<Object>} options
- */
-recoil.ui.widgets.SelectorWidget.prototype.attachStruct = function(options) {
-    var frp = this.helper_.getFrp();
-    var util = new recoil.frp.Util(frp);
-    var bound = recoil.ui.widgets.SelectorWidget.options.bind(frp, options);
-    // var optionsB = structs.flatten(frp, options);
-
-    // var bound = recoil.ui.widgets.SelectorWidget.options.bind(optionsB);
-    // this.nameB_ =  bound.name();
-
-    this.nameB_ = bound.name();
-    this.valueB_ = bound.value();
-    this.editableB_ = bound.editable();
-    this.listB_ = bound.list();
     /**
-     * @type {recoil.frp.Behaviour<!Array<recoil.ui.BoolWithExplanation>>}
-     * @private
+     * @param {!Object| !recoil.frp.Behaviour<Object>} options
      */
-    this.enabledItemsB_ = bound.enabledItems();
-    /**
-     * @type {recoil.frp.Behaviour.<!recoil.ui.BoolWithExplanation>}
-     * @private
-     */
-    this.enabledB_ = bound.enabled();
-    this.rendererB_ = bound.renderer();
+    attachStruct(options:AttachType<{
+        name: string;
+        renderer: RendererFn<Type>,
+        enabledItems: BoolWithExplanation[] // matches list index
+    } & StandardOptionsType>) {
+        let frp = this.helper_.getFrp();
+        let bound = SelectorWidget.options.bind(frp, options);
 
-    this.helper_.attach(this.nameB_, this.valueB_, this.listB_, this.enabledB_, this.rendererB_,
-                        this.enabledItemsB_, this.editableB_);
-    const key = recoil.util.object.uniq();
+        // let optionsB = structs.flatten(frp, options);
 
-    this.readOnlyWidget_.attachStruct(frp.liftB(
-        function(val, renderer) {
-            let formatter = function(v) {
-                try {
-                    return renderer(v, true, false);
-                }
-                catch (e) {
-                    return '';
-                }
-            };
-            return {
-                name: val,
-                formatter: formatter
-            };
+        // let bound = recoil.ui.widgets.SelectorWidget.options.bind(optionsB);
+        // this.nameB_ =  bound.name();
 
-    }, this.valueB_, this.rendererB_));
+        this.configB_ = bound[getGroup]([
+            bound.name, bound.editable, bound.enabled,
+            bound.renderer,
+            bound.list, bound.enabledItems,  bound.tooltip]);
+        this.valueB_ = bound.value();
 
-    var me = this;
-    this.changeHelper_.listen(this.scope_.getFrp().createCallback(function(v) {
+        this.helper_.attach(this.configB_, this.valueB_);
+        const key = recoil.util.object.uniq();
 
-        var idx = v.target.getSelectedIndex();
-        var list = me.listB_.get();
-        if (idx < list.length) {
-            me.valueB_.set(list[idx]);
-        }
+        this.readOnlyWidget_.attachStruct(frp.liftB(
+            function (val, renderer) {
+                let formatter = function (v) {
+                    try {
+                        return renderer(v, true, false);
+                    } catch (e) {
+                        return '';
+                    }
+                };
+                return {
+                    name: val,
+                    formatter: formatter
+                };
 
-    }, this.valueB_, this.listB_));
-    this.enabledHelper_.attach(
-        /** @type {!recoil.frp.Behaviour<!recoil.ui.BoolWithExplanation>} */ (this.enabledB_),
-        this.helper_);
-};
+            }, this.valueB_, this.rendererB_));
 
-/**
- * @template T
- * @param {function(T,boolean, recoil.ui.BoolWithExplanation) : string} renderer
- * @param {Object} val
- * @param {boolean} valid
- * @param {recoil.ui.BoolWithExplanation} enabled
- * @return {goog.ui.MenuItem}
- * @private
- */
-recoil.ui.widgets.SelectorWidget.createMenuItem_ = function(renderer, val, valid, enabled) {
-    var item = new goog.ui.MenuItem(renderer(val, valid, enabled), {value: val, valid: valid, enabled: enabled, renderer: renderer});
-    if (enabled && enabled.val && !enabled.val()) {
-        item.setEnabled(false);
-    }
-    return item;
-};
+        let me = this;
+        this.changeHelper_.listen(this.scope_.getFrp().createCallback(function (v) {
 
-/**
- *
- * @param {recoil.ui.WidgetHelper} helper
- * @private
- */
-recoil.ui.widgets.SelectorWidget.prototype.updateState_ = function(helper) {
-
-    if (helper.isGood()) {
-        // console.log('in selectWidget updateState');
-        var list = this.listB_.get();
-        var sel = this.selector_;
-        var enabledItems = this.enabledItemsB_.get();
-        //sel.setEnabled(this.enabledB_.get().val());
-        sel.setVisible(this.editableB_.get());
-        this.readOnlyWidget_.getComponent().setVisible(!this.editableB_.get());
-        var renderer = this.rendererB_.get();
-
-
-        for (var i = sel.getItemCount() - 1; i >= 0; i--) {
-            sel.removeItemAt(i);
-        }
-
-        var found = -1;
-        if (list) {
-            for (i = 0; i < list.length; i++) {
-                var val = list[i];
-                var enabled = enabledItems.length > i ? enabledItems[i] : recoil.ui.BoolWithExplanation.TRUE;
-                sel.addItem(recoil.ui.widgets.SelectorWidget.createMenuItem_(renderer, val, true, enabled));
-                if (recoil.util.isEqual(this.valueB_.get(), val)) {
-                    found = i;
-                }
-            }
-            if (found === -1) {
-                sel.addItem(recoil.ui.widgets.SelectorWidget.createMenuItem_(renderer, this.valueB_.get(), false, recoil.ui.BoolWithExplanation.FALSE));
-                found = list.length;
+            let idx = v.target.getSelectedIndex();
+            let list = me.listB_.get();
+            if (idx < list.length) {
+                me.valueB_.set(list[idx]);
             }
 
-            sel.setSelectedIndex(found);
-        }
+        }, this.valueB_, this.listB_));
+        this.enabledHelper_.attach(
+            /** @type {!recoil.frp.Behaviour<!recoil.ui.BoolWithExplanation>} */ (this.enabledB_),
+            this.helper_);
     }
 
-};
+    /**
+     * @template T
+     * @param {function(T,boolean, recoil.ui.BoolWithExplanation) : string} renderer
+     * @param {Object} val
+     * @param {boolean} valid
+     * @param {recoil.ui.BoolWithExplanation} enabled
+     * @return {goog.ui.MenuItem}
+     * @private
+     */
+    private static createMenuItem_<T>(renderer: RendererFn<T>, val:T, valid, enabled) {
+        let item = new goog.ui.MenuItem(renderer(val, valid, enabled), {
+            value: val,
+            valid: valid,
+            enabled: enabled,
+            renderer: renderer
+        });
+        if (enabled && enabled.val && !enabled.val()) {
+            item.setEnabled(false);
+        }
+        return item;
+    };
 
-/**
- * all widgets should not allow themselves to be flatterned
- *
- * @type {!Object}
- */
+    /**
+     *
+     * @param {recoil.ui.WidgetHelper} helper
+     * @private
+     */
+    private updateState_(helper: WidgetHelper) {
 
-recoil.ui.widgets.SelectorWidget.prototype.flatten = recoil.frp.struct.NO_FLATTEN;
+        if (helper.isGood()) {
+            // console.log('in selectWidget updateState');
+            let list = this.listB_.get();
+            let sel = this.selector_;
+            let enabledItems = this.enabledItemsB_.get();
+            //sel.setEnabled(this.enabledB_.get().val());
+            sel.setVisible(this.editableB_.get());
+            this.readOnlyWidget_.getComponent().setVisible(!this.editableB_.get());
+            let renderer = this.rendererB_.get();
+
+
+            for (let i = sel.getItemCount() - 1; i >= 0; i--) {
+                sel.removeItemAt(i);
+            }
+
+            let found = -1;
+            if (list) {
+                for (let i = 0; i < list.length; i++) {
+                    let val = list[i];
+                    let enabled = enabledItems.length > i ? enabledItems[i] : BoolWithExplanation.TRUE;
+                    sel.addItem(SelectorWidget.createMenuItem_(renderer, val, true, enabled));
+                    if (isEqual(this.valueB_?.get(), val)) {
+                        found = i;
+                    }
+                }
+                if (found === -1) {
+                    sel.addItem(SelectorWidget.createMenuItem_(renderer, this.valueB_.get(), false, BoolWithExplanation.FALSE));
+                    found = list.length;
+                }
+
+                sel.setSelectedIndex(found);
+            }
+        }
+
+    }
+}

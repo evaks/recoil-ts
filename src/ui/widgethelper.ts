@@ -1,5 +1,5 @@
 import {DomObserver} from "./domobserver";
-import {Behaviour, BehaviourList, BStatus, Frp} from "../frp/frp";
+import {Behaviour, BehaviourList, BStatus, ErrorType, Frp} from "../frp/frp";
 import {WidgetScope} from "./widgets/widgetscope";
 import * as classlist from "./dom/classlist";
 import {append, createTextNode, removeChildren} from "./dom/dom";
@@ -10,23 +10,31 @@ export class WidgetHelper {
     private readonly observer_: DomObserver;
     private readonly frp_: Frp;
     private readonly element_: Element;
-    private readonly detachCallback_: () => void;
     private behaviours_: BehaviourList = [];
     private attachedBehaviour_: Behaviour<any> | null = null;
     private isAttached_: boolean = false;
     private debug_: string | null;
     private readonly listenFunc_: (exists: boolean) => void;
     private callback_: () => BStatus<null>;
+    private cleanupCallbacks_: {detach:(() => void), attach: (() => void)}[] = [];
+    private obj_:any;
 
-    constructor(widgetScope: WidgetScope, element: Element, obj: any, callback:(this:any, helper:WidgetHelper,...behavioiurs:BehaviourList)=>void, opt_detachCallback?: () => void) {
+
+    constructor(widgetScope: WidgetScope,
+                element: Element, obj: any,
+                callback:(this:any, helper:WidgetHelper,...behavioiurs:BehaviourList)=>void,
+                cleanup?:{
+                    detach:  (() => void),
+                    attach: (() => void)
+                }) {
         this.observer_ = widgetScope.getObserver();
         this.frp_ = widgetScope.getFrp();
         this.element_ = element;
-        this.detachCallback_ = () => {
-            if (opt_detachCallback) {
-                opt_detachCallback.apply(obj, []);
-            }
-        };
+        this.cleanupCallbacks_ = cleanup ? [cleanup] : [];
+        this.obj_ = obj;
+
+
+
 
         this.debug_ = null;
         if (!(callback instanceof Function)) {
@@ -40,11 +48,11 @@ export class WidgetHelper {
                 return;
             }
             if (visible != this.isAttached_) {
-                this.isAttached_ = visible;
                 if (visible) {
+                    this.doAttachCallbacks_();
                     this.frp_.attach(this.attachedBehaviour_);
                 } else {
-                    this.detachCallback_();
+                    this.doDetachCallbacks_();
                     this.frp_.detach(this.attachedBehaviour_);
                 }
             }
@@ -61,6 +69,30 @@ export class WidgetHelper {
             return new BStatus(null);
         };
     }
+    getFrp(): Frp {
+        return this.frp_;
+    }
+
+    addDetachCallback(cb: {attach: () => void, detach: () => void}) {
+        this.cleanupCallbacks_.push(cb);
+    }
+
+    private doAttachCallbacks_() {
+        if (!this.isAttached_) {
+            this.isAttached_ = true;
+            for (let {attach: callback} of this.cleanupCallbacks_) {
+                callback.apply(this.obj_, []);
+            }
+        }
+    }
+    private doDetachCallbacks_() {
+        if (this.isAttached_) {
+            this.isAttached_ = false;
+            for (let {detach: callback} of this.cleanupCallbacks_) {
+                callback.apply(this.obj_, []);
+            }
+        }
+    }
     get behaviours() {
         return this.behaviours_;
     }
@@ -72,8 +104,13 @@ export class WidgetHelper {
      * @param curClasses
      * @return the new classes
      */
-    static updateClasses(element: HTMLElement, classesB: Behaviour<string[]>|undefined, curClasses: string[]): string[] {
+    static updateClasses(element: Element, classesB: Behaviour<string[]>|undefined, opt_curClasses?: string[]): string[] {
         let newClasses = classesB && classesB.metaGet().good() ? classesB.get() : [];
+        let curClasses  = opt_curClasses == undefined ? classlist.get(element) : opt_curClasses;
+        return WidgetHelper.updateClassesNoBehaviour(newClasses, curClasses, element);
+    }
+
+    static updateClassesNoBehaviour(newClasses: string[], curClasses: string[], element: Element) {
         for (let cls of newClasses) {
             if (curClasses.indexOf(cls) === -1) {
                 classlist.add(element, cls);
@@ -88,8 +125,9 @@ export class WidgetHelper {
         return newClasses;
     }
 
-    getFrp(): Frp {
-        return this.frp_;
+    static updateClassesOption<T extends {classes:string[]}> (element: HTMLElement, optionsB: Behaviour<T>|undefined, curClasses: string[]): string[] {
+        let newClasses = optionsB && optionsB.metaGet().good() && optionsB.get().classes || [];
+        return WidgetHelper.updateClassesNoBehaviour(newClasses, curClasses, element);
     }
 
     /**
@@ -102,6 +140,7 @@ export class WidgetHelper {
     /**
      * @return {boolean}
      */
+
     isAttached() {
         return this.isAttached_;
     }
@@ -150,7 +189,7 @@ export class WidgetHelper {
     /**
      * @return {!Array<*>} an array of errors
      */
-    errors(): any[] {
+    errors(): ErrorType[] {
         let result = [];
 
 
@@ -186,7 +225,7 @@ export class WidgetHelper {
     forceUpdate(): void {
         // if there are no behaviours then no need to fire since they don't change
         if (this.behaviours_.length !== 0) {
-            Frp.access(this.detachCallback_, ...this.behaviours_);
+            Frp.access(this.callback_, ...this.behaviours_);
         }
     }
 
@@ -235,7 +274,7 @@ export class WidgetHelper {
                 if (this.attachedBehaviour_) {
                     this.frp_.detach(this.attachedBehaviour_);
                 }
-                this.detachCallback_();
+                this.doDetachCallbacks_();
             }
         }
 
@@ -254,7 +293,7 @@ export class WidgetHelper {
                 this.observer_.unlisten(this.element_, this.listenFunc_);
             }
         } else {
-            this.isAttached_ = false;
+            this.doDetachCallbacks_();
             if (this.behaviours_.length > 0) {
                 this.observer_.listen(this.element_, this.listenFunc_);
             }

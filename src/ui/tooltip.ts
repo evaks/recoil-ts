@@ -20,7 +20,6 @@
  */
 
 
-import {assert} from "../util/goog";
 import {
     append,
     contains, createTextNode,
@@ -32,16 +31,19 @@ import {
     removeChildren, removeNode,
     setTextContent
 } from "./dom/dom";
-import {EventType} from "./dom/eventType";
+import {EventType} from "./dom/eventtype";
 import {TagName} from "./dom/tags";
-import {EventHelper, Unlistener} from "./eventhelper";
+import {EventHelper, type Unlistener} from "./eventhelper";
 import {Box} from "./dom/box";
 import {AnchoredPosition} from "./positioning/anchoredposition";
-import {Corner, Overflow, OverflowStatus, positionAtAnchor} from "./positioning/positioning";
+import {Corner, Overflow, OverflowStatus, positionAtAnchor, positionAtCoordinate} from "./positioning/positioning";
 import {Coordinate} from "./dom/coordinate";
-import {set, setAll} from "./dom/classlist";
+import classlist, {setAll} from "./dom/classlist";
 import {AbstractPosition} from "./positioning/abstractposition";
-import {PopupBase} from "./popupbase";
+import {ViewPortPosition} from "./positioning/viewportposition";
+import {Popup} from "./popup";
+import {DomObserver} from "./domobserver.ts";
+import {Message} from "./message.ts";
 
 /**
  * Possible states for the tooltip to be in.
@@ -64,25 +66,14 @@ enum Activation {
     FOCUS = 1
 }
 
-/**
- * Tooltip widget. Can be attached to one or more elements and is shown, with a
- * slight delay, when the the cursor is over the element or the element gains
- * focus.
- *
- * @param {Element|string=} opt_el Element to display tooltip for, either
- *     element reference or string id.
- * @param {?string=} opt_str Text message to display in tooltip.
- * @param {goog.dom.DomHelper=} opt_domHelper Optional DOM helper.
- * @constructor
- * @extends {goog.ui.Popup}
- */
-export class Tooltip extends PopupBase{
-    private dom_: DomHelper;
+export class Tooltip extends Popup {
+    private readonly dom_: DomHelper;
     private focusListeners_: Unlistener[] = [];
     /**
      * CSS class name for tooltip.
      */
-    className: string = getCssName('recoil-tooltip');
+    private enabled_ = true;
+    private classes_ = ['recoil-tooltip'];
     /**
      * List of active (open) tooltip widgets. Used to prevent multiple tooltips
      * from appearing at once.
@@ -137,16 +128,33 @@ export class Tooltip extends PopupBase{
      * @type {Element|undefined}
      * @protected
      */
-    protected anchor: Element | null  = null;
-    private attachedElements_ = new Map<Element, Unlistener[]>();
+    protected anchor: Element | null = null;
+    private attachedElements_ = new Map<Element, {
+        inDom: boolean,
+        listeners: Unlistener[],
+        callback: (e: boolean) => void
+    }>();
     private elementMouseListeners_: Unlistener[] = [];
-    private cursorPosition:Coordinate;
+    private cursorPosition: Coordinate;
+    private container_: Node;
 
-    constructor(opt_el?: Element, opt_str?:string, opt_domHelper?:DomHelper) {
-        let dom = getDomHelper(opt_el ? getElement(opt_el): null);
+    /**
+     * Tooltip widget. Can be attached to one or more elements and is shown, with a
+     * slight delay, when the the cursor is over the element or the element gains
+     * focus.
+     *
+     * @param  opt_el Element to display tooltip for, either
+     *     element reference or string id.
+     * @param opt_msg message to display in tooltip.
+     * @param container where the tooltip message will go, if not provided will go in the root element
+     * @param opt_domHelper Optional DOM helper.
+     */
+    constructor(opt_el?: Element, opt_msg?: string | Message | Node, container?: Node, opt_domHelper?: DomHelper) {
+        let dom = opt_domHelper || getDomHelper(opt_el ? getElement(opt_el) : null);
         super(dom.createDom(
             TagName.DIV, {'style': 'position:absolute;display:none;'}));
         this.dom_ = dom;
+        this.container_ = container || window.document.body;
 
         /**
          * Cursor position relative to the page.
@@ -157,8 +165,6 @@ export class Tooltip extends PopupBase{
 
         /**
          * Elements this widget is attached to.
-         * @type {goog.structs.Set}
-         * @private
          */
 
         // Attach to element, if specified
@@ -168,17 +174,28 @@ export class Tooltip extends PopupBase{
 
         // Set message, if specified.
         removeChildren(this.element_);
-        if (opt_str != null) {
-            this.element_.appendChild(createTextNode(opt_str));
+
+        if (opt_msg instanceof Message) {
+            this.element_.appendChild(createTextNode(opt_msg.toString()));
+        } else if (typeof opt_msg === 'string') {
+            this.element_.appendChild(createTextNode(opt_msg));
+        } else if (opt_msg instanceof Node) {
+            this.element_.appendChild(opt_msg);
         }
+
     }
 
-    setClasses(classes:string[]) {
-        setAll(this.element_ as HTMLElement, classes);
+    setClasses(classes: string[]) {
+        this.classes_ = classes;
+    }
+
+    private updateClasses_() {
+        setAll(this.element_ as HTMLElement, this.enabled_ ? this.classes_ : ['recoil-disabled', ...this.classes_]);
+
     }
     /**
      * Returns the dom helper that is being used on this component.
-     * @return {goog.dom.DomHelper} The dom helper used on this component.
+     * @return The dom helper used on this component.
      */
     getDomHelper(): DomHelper {
         return this.dom_;
@@ -189,7 +206,7 @@ export class Tooltip extends PopupBase{
      * @return Active tooltip in a child element, or null if none.
      * @protected
      */
-    getChildTooltip():Tooltip|null {
+    getChildTooltip(): Tooltip | null {
         return this.childTooltip_;
     }
 
@@ -226,23 +243,52 @@ export class Tooltip extends PopupBase{
      * Attach to element. Tooltip will be displayed when the cursor is over the
      * element or when the element has been active for a few milliseconds.
      *
-     * @param {Element|string} el Element to display tooltip for, either element
+     * @param elOrId Element to display tooltip for, either element
      *                            reference or string id.
      */
     attach(elOrId: Element | string) {
         let el = getRequiredElement(elOrId);
 
-        let listeners: Unlistener[] = this.attachedElements_.get(el) || [];
-        this.attachedElements_.set(el, listeners);
-        EventHelper.reregister(listeners,
+        let info = this.attachedElements_.get(el);
+        if (!info) {
+            let newInfo = {
+                inDom: DomObserver.exists(el), listeners: [],
+                callback: (exists: boolean) => {
+                    newInfo.inDom = exists;
+                    this.updateInDom()
+                }
+            };
+            info = newInfo
+            DomObserver.instance.listen(el, info.callback);
+        }
+
+        this.attachedElements_.set(el, info);
+        EventHelper.reregister(info.listeners,
             EventHelper.listen(el, EventType.MOUSEOVER, this.handleMouseOver.bind(this), false),
             EventHelper.listen(el, EventType.MOUSEOUT, this.handleMouseOutAndBlur.bind(this), false),
-
             EventHelper.listen(el, EventType.MOUSEMOVE, this.handleMouseMove.bind(this), false),
             EventHelper.listen(el, EventType.FOCUS, this.handleFocus.bind(this), false),
             EventHelper.listen(el, EventType.BLUR, this.handleMouseOutAndBlur.bind(this), false));
+
+        this.updateInDom();
     }
 
+    updateInDom() {
+        let anyAttachedInDom = false;
+        for (let [_, info] of this.attachedElements_) {
+            if (info.inDom) {
+                anyAttachedInDom = true;
+                break;
+            }
+        }
+        if (anyAttachedInDom) {
+            if (!this.element_.parentNode) {
+                this.container_.appendChild(this.element_);
+            }
+        } else if (this.element_.parentNode) {
+            removeNode(this.element_);
+        }
+    }
 
     /**
      * Detach from element(s).
@@ -268,13 +314,17 @@ export class Tooltip extends PopupBase{
         }
     }
 
+    dispose() {
+        super.disposeInternal();
+        this.disposeInternal();
+    }
+
     /**
      * Handler for mouse over events.
      *
-     * @param {goog.events.BrowserEvent} event Event object.
-     * @protected
+     * @param event Event object.
      */
-    handleMouseOver(event: MouseEvent) {
+    protected handleMouseOver(event: MouseEvent) {
         let el = this.getAnchorFromElement(event.target as Element);
         this.activeEl_ = el;
         this.clearHideTimer();
@@ -302,9 +352,11 @@ export class Tooltip extends PopupBase{
      */
     private detachElement_(el: Element) {
 
-        let listeners = this.attachedElements_.get(el);
-        if (listeners) {
-            EventHelper.reregister(listeners);
+        let info = this.attachedElements_.get(el);
+        if (info) {
+            this.attachedElements_.delete(el);
+            DomObserver.instance.unlisten(el, info.callback)
+            EventHelper.unregister(info.listeners);
         }
     }
 
@@ -325,8 +377,6 @@ export class Tooltip extends PopupBase{
     getShowDelayMs(): number {
         return this.showDelayMs_;
     }
-    ;
-
 
     /**
      * Sets delay in milliseconds before tooltip is hidden once the cursor leavs
@@ -337,14 +387,12 @@ export class Tooltip extends PopupBase{
     setHideDelayMs(delay: number) {
         this.hideDelayMs_ = delay;
     }
-    ;
-
 
     /**
-     * @return {number} The delay in milliseconds before tooltip is hidden once the
+     * @return The delay in milliseconds before tooltip is hidden once the
      *     cursor leaves the element.
      */
-    getHideDelayMs() {
+    getHideDelayMs(): number {
         return this.hideDelayMs_;
     }
 
@@ -362,12 +410,10 @@ export class Tooltip extends PopupBase{
     /**
      * Sets tooltip element.
      *
-     * @param {Element} el HTML element to use as the tooltip.
-     * @override
      */
-    setElement(el:Element) {
+    setElement(el: Element) {
         removeChildren(this.element_);
-        this.element_.appendChild(this.element_);
+        this.element_.appendChild(el);
     }
 
 
@@ -385,17 +431,17 @@ export class Tooltip extends PopupBase{
 
 
     /**
-     * @return {string} The tooltip message as plain text.
+     * @return The tooltip message as plain text.
      */
-    getText() {
+    getText(): string {
         return getTextContent(this.element_);
     }
 
 
     /**
-     * @return {goog.ui.Tooltip.State} Current state of tooltip.
+     * @return Current state of tooltip.
      */
-    getState() {
+    getState(): State {
         return this.showTimer ?
             (this.isVisible() ? State.UPDATING : State.WAITING_TO_SHOW) :
             this.hideTimer ? State.WAITING_TO_HIDE :
@@ -416,11 +462,11 @@ export class Tooltip extends PopupBase{
 
     /**
      * Returns true if the coord is in the tooltip.
-     * @param {Coordinate} coord Coordinate being tested.
-     * @return {boolean} Whether the coord is in the tooltip.
+     * @param coord Coordinate being tested.
+     * @return Whether the coord is in the tooltip.
      */
-    isCoordinateInTooltip(coord:Coordinate) {
-        // Check if coord is inside the the tooltip
+    isCoordinateInTooltip(coord: Coordinate): boolean {
+        // Check if coord is inside the tooltip
         if (!this.isVisible()) {
             return false;
         }
@@ -435,11 +481,9 @@ export class Tooltip extends PopupBase{
     /**
      * Called before the popup is shown.
      *
-     * @return {boolean} Whether tooltip should be shown.
-     * @protected
-     * @override
+     * @return  Whether tooltip should be shown.
      */
-    onBeforeShow() {
+    protected onBeforeShow(): boolean {
         if (!super.onBeforeShow()) {
             return false;
         }
@@ -457,7 +501,7 @@ export class Tooltip extends PopupBase{
         Tooltip.activeInstances_.add(this);
 
         let element = this.element_;
-        element.className = this.className;
+        this.updateClasses_();
         this.clearHideTimer();
 
         // Register event handlers for tooltip. Used to prevent the tooltip from
@@ -472,9 +516,7 @@ export class Tooltip extends PopupBase{
         return true;
     }
 
-
-    /** @override */
-    onHide() {
+    protected onHide() {
         Tooltip.activeInstances_.delete(this);
         // Hide all open tooltips triggered by an element inside this tooltip.
         let element = this.element_;
@@ -508,10 +550,10 @@ export class Tooltip extends PopupBase{
      * @param {AbstractPosition=} opt_pos Position to display popup
      *     at.
      */
-    maybeShow(el:Element, opt_pos:AbstractPosition) {
+    maybeShow(el: Element | null, opt_pos?: AbstractPosition) {
         // Assert that the mouse is still over the same element, and that we have not
         // detached from the anchor in the meantime.
-        if (this.anchor == el && this.attachedElements_.has(this.anchor)) {
+        if (this.anchor == el && this.anchor && this.attachedElements_.has(this.anchor)) {
             if (this.seenInteraction_ || !this.requireInteraction_) {
                 // If it is currently showing, then hide it, and abort if it doesn't hide.
                 this.setVisible(false);
@@ -524,71 +566,63 @@ export class Tooltip extends PopupBase{
         }
         this.showTimer = undefined;
     }
-    ;
-
 
     /**
-     * @return {goog.structs.Set} Elements this widget is attached to.
+     * @return Elements this widget is attached to.
      * @protected
      */
-    getElements():Set<Element> {
+    protected getElements(): Set<Element> {
         return new Set(this.attachedElements_.keys());
     }
 
 
     /**
-     * @return {Element} Active element reference.
+     * @return Active element reference.
      */
-    getActiveElement() {
+    getActiveElement(): Element | null {
         return this.activeEl_;
     }
 
-    /**
-     * @param {Element} activeEl Active element reference.
-     * @protected
-     */
-    setActiveElement(activeEl:Element|null) {
+    protected setActiveElement(activeEl: Element | null) {
         this.activeEl_ = activeEl;
     }
 
     /**
      * Sets the position helper object associated with the popup.
      *
-     * @param {goog.positioning.AbstractPosition} position A position helper object.
+     * @param position A position helper object.
      */
-    setPosition(position:AbstractPosition) {
+    setPosition(position: AbstractPosition) {
         this.position_ = position || undefined;
         if (this.isVisible()) {
             this.reposition();
         }
     }
+
     /**
      * Shows tooltip for a specific element.
      *
-     * @param {Element} el Element to show tooltip for.
-     * @param {AbstractPosition=} opt_pos Position to display popup
+     * @param el Element to show tooltip for.
+     * @param opt_pos Position to display popup
      *     at.
      */
-    showForElement(el, opt_pos) {
+    showForElement(el: Element, opt_pos?: AbstractPosition) {
         this.attach(el);
         this.activeEl_ = el;
-
         this.positionAndShow_(el, opt_pos);
     }
 
     /**
      * Sets tooltip position and shows it.
      *
-     * @param {Element} el Element to show tooltip for.
-     * @param {AbstractPosition=} opt_pos Position to display popup
-     *     at.
-     * @private
+     * @param el Element to show tooltip for.
+     * @param opt_pos Position to display popup at.
      */
-    private positionAndShow_(el, opt_pos) {
+    private positionAndShow_(el: Element | null, opt_pos?: AbstractPosition) {
         this.anchor = el;
         this.setPosition(
             opt_pos ||
-            this.getPositioningStrategy(goog.ui.Tooltip.Activation.CURSOR));
+            this.getPositioningStrategy(Activation.CURSOR));
         this.setVisible(true);
     };
 
@@ -598,7 +632,7 @@ export class Tooltip extends PopupBase{
      * outside element and tooltip, or if a child of tooltip has the focus.
      * @param el Tooltip's anchor when hide timer was started.
      */
-    maybeHide(el:Element) {
+    maybeHide(el: Element | null) {
         this.hideTimer = undefined;
         if (el == this.anchor) {
             let dom = this.getDomHelper();
@@ -608,7 +642,7 @@ export class Tooltip extends PopupBase{
                 dom.contains(this.getElement(), focusedEl);
             if ((this.activeEl_ == null ||
                     (this.activeEl_ != this.getElement() &&
-                        !this.elements_.contains(this.activeEl_))) &&
+                        !this.attachedElements_.has(this.activeEl_))) &&
                 !tooltipContentFocused && !this.hasActiveChild()) {
                 this.setVisible(false);
             }
@@ -617,16 +651,13 @@ export class Tooltip extends PopupBase{
 
 
     /**
-     * @return {boolean} Whether tooltip element contains an active child tooltip,
+     * @return Whether tooltip element contains an active child tooltip,
      *     and should thus not be hidden.  When the child tooltip is hidden, it
      *     will check if the parent should be hidden, too.
-     * @protected
      */
-    hasActiveChild():boolean {
+    protected hasActiveChild(): boolean {
         return !!(this.childTooltip_ && this.childTooltip_.activeEl_);
     }
-    ;
-
 
     /**
      * Saves the current mouse cursor position to {@code this.cursorPosition}.
@@ -647,7 +678,7 @@ export class Tooltip extends PopupBase{
      *     or null if not found.
      * @protected
      */
-    getAnchorFromElement(el: Element|null): Element|null {
+    protected getAnchorFromElement(el: Element | null): Element | null {
         // FireFox has a bug where mouse events relating to <input> elements are
         // sometimes duplicated (often in FF2, rarely in FF3): once for the
         // <input> element and once for a magic hidden <div> element.  Javascript
@@ -657,7 +688,7 @@ export class Tooltip extends PopupBase{
         // See https://bugzilla.mozilla.org/show_bug.cgi?id=330961
         try {
             while (el && !this.attachedElements_.has(el)) {
-                el = (el.parentNode) as Element|null;
+                el = (el.parentNode) as Element | null;
             }
             return el;
         } catch (e) {
@@ -668,10 +699,10 @@ export class Tooltip extends PopupBase{
     /**
      * Handler for mouse move events.
      *
-     * @param {goog.events.BrowserEvent} event MOUSEMOVE event.
+     * @param event MOUSEMOVE event.
      * @protected
      */
-    handleMouseMove(event:MouseEvent) {
+    handleMouseMove(event: MouseEvent) {
         this.saveCursorPosition_(event);
         this.seenInteraction_ = true;
     }
@@ -681,11 +712,11 @@ export class Tooltip extends PopupBase{
     /**
      * Handler for focus events.
      *
-     * @param {goog.events.BrowserEvent} event Event object.
+     * @param event Event object.
      * @protected
      */
-    handleFocus(event:Event) {
-        let el = this.getAnchorFromElement(event.target as Element|null);
+    handleFocus(event: Event) {
+        let el = this.getAnchorFromElement(event.target as Element | null);
         this.activeEl_ = el;
         this.seenInteraction_ = true;
 
@@ -693,7 +724,9 @@ export class Tooltip extends PopupBase{
             this.anchor = el;
             let pos = this.getPositioningStrategy(Activation.FOCUS);
             this.clearHideTimer();
-            this.startShowTimer(el, pos);
+            if (el) {
+                this.startShowTimer(el, pos);
+            }
 
             this.checkForParentTooltip_();
         }
@@ -705,21 +738,18 @@ export class Tooltip extends PopupBase{
      * Return a Position instance for repositioning the tooltip. Override in
      * subclasses to customize the way repositioning is done.
      *
-     * @param {goog.ui.Tooltip.Activation} activationType Information about what
+     * @param activationType Information about what
      *    kind of event caused the popup to be shown.
-     * @return {!AbstractPosition} The position object used
+     * @return The position object used
      *    to position the tooltip.
-     * @protected
      */
-    getPositioningStrategy(activationType) {
-        if (activationType == goog.ui.Tooltip.Activation.CURSOR) {
+    protected getPositioningStrategy(activationType: Activation): AbstractPosition {
+        if (activationType == Activation.CURSOR || this.activeEl_ === null) {
             let coord = this.cursorPosition.clone();
             return new CursorTooltipPosition(coord);
         }
         return new ElementTooltipPosition(this.activeEl_);
     }
-    ;
-
 
     /**
      * Looks for an active tooltip whose element contains this tooltip's anchor.
@@ -729,23 +759,19 @@ export class Tooltip extends PopupBase{
      */
     private checkForParentTooltip_() {
         if (this.anchor) {
-            for (let tt of  Tooltip.activeInstances_) {
+            for (let tt of Tooltip.activeInstances_) {
                 if (contains(tt.element_, this.anchor)) {
                     tt.childTooltip_ = this;
                     this.parentTooltip_ = tt;
                 }
             }
         }
-    };
-
-
-;
-
+    }
 
     /**
      * Handler for mouse over events for the tooltip element.
      *
-     * @param {goog.events.BrowserEvent} event Event object.
+     * @param event Event object.
      * @protected
      */
     handleTooltipMouseOver(event: Event) {
@@ -755,25 +781,22 @@ export class Tooltip extends PopupBase{
             this.activeEl_ = element;
         }
     }
-    ;
-
 
     /**
      * Handler for mouse out events for the tooltip element.
      *
-     * @param {goog.events.BrowserEvent} event Event object.
+     * @param event Event object.
      * @protected
      */
-    handleTooltipMouseOut(event: Event) {
+    handleTooltipMouseOut(event: MouseEvent) {
         let element = this.getElement();
         if (this.activeEl_ == element &&
             (!event.relatedTarget ||
-                !contains(element, event.relatedTarget))) {
+                !contains(element, event.relatedTarget as Node))) {
             this.activeEl_ = null;
             this.startHideTimer();
         }
     }
-    ;
 
 
     /**
@@ -781,11 +804,11 @@ export class Tooltip extends PopupBase{
      * the maybeShow method.
      *
      * @param el Element to show tooltip for.
-     * @param {AbstractPosition=} opt_pos Position to display popup
+     * @param opt_pos Position to display popup
      *     atg.
      * @protected
      */
-    startShowTimer(el: Element, opt_pos?) {
+    startShowTimer(el: Element | null, opt_pos?: AbstractPosition) {
         if (!this.showTimer) {
             this.showTimer = setTimeout(() => this.maybeShow(el, opt_pos), this.showDelayMs_);
 
@@ -827,49 +850,51 @@ export class Tooltip extends PopupBase{
 
 
     /** @override */
-    disposeInternal() {
+    protected disposeInternal() {
         this.setVisible(false);
         this.clearShowTimer();
         this.detach();
         removeNode(this.element_);
         this.activeEl_ = null;
-        delete this.dom_;
+    }
+
+    setEnabled(enabled: boolean) {
+        this.enabled_ = enabled;
+        this.updateClasses_();
     }
 }
 
 
-/**
- * Popup position implementation that positions the popup (the tooltip in this
- * case) based on the cursor position. It's positioned below the cursor to the
- * right if there's enough room to fit all of it inside the Viewport. Otherwise
- * it's displayed as far right as possible either above or below the element.
- *
- * Used to position tooltips triggered by the cursor.
- *
- * @param {number|!Coordinate} arg1 Left position or coordinate.
- * @param {number=} opt_arg2 Top position.
- * @constructor
- * @extends {ViewportPosition}
- * @final
- */
-class CursorTooltipPosition {
-    constructor(arg1, opt_arg2) {
-        ViewportPosition.call(this, arg1, opt_arg2);
+class CursorTooltipPosition extends ViewPortPosition {
+    /**
+     * Popup position implementation that positions the popup (the tooltip in this
+     * case) based on the cursor position. It's positioned below the cursor to the
+     * right if there's enough room to fit all of it inside the Viewport, otherwise
+     * it's displayed as far right as possible either above or below the element.
+     *
+     * Used to position tooltips triggered by the cursor.
+     *
+     * @param arg1 Left position or coordinate.
+     * @param opt_arg2 Top position.
+     * @final
+     */
+    constructor(arg1: number | Coordinate, opt_arg2?: number) {
+        super(arg1, opt_arg2);
     }
 
 
     /**
      * Repositions the popup based on cursor position.
      *
-     * @param {Element} element The DOM element of the popup.
-     * @param {Corner} popupCorner The corner of the popup element
+     * @param element The DOM element of the popup.
+     * @param popupCorner The corner of the popup element
      *     that that should be positioned adjacent to the anchorElement.
-     * @param {Box=} opt_margin A margin specified in pixels.
+     * @param opt_margin A margin specified in pixels.
      * @override
      */
 
     reposition(
-        element, popupCorner, opt_margin) {
+        element: Element, popupCorner: Corner, opt_margin?: Box) {
         let viewportElt = getClientViewportElement(element);
         let viewport = getVisibleRectForElement(viewportElt);
         let margin = opt_margin ?
@@ -894,7 +919,7 @@ class CursorTooltipPosition {
 /**
  * Popup position implementation that positions the popup (the tooltip in this
  * case) based on the element position. It's positioned below the element to the
- * right if there's enough room to fit all of it inside the Viewport. Otherwise
+ * right if there's enough room to fit all of it inside the Viewport, otherwise
  * it's displayed as far right as possible either above or below the element.
  *
  * Used to position tooltips triggered by focus changes.
@@ -919,7 +944,7 @@ class ElementTooltipPosition extends AnchoredPosition {
      * @override
      */
     reposition(
-        element:Element, popupCorner:Corner, opt_margin?:Box) {
+        element: Element, popupCorner: Corner, opt_margin?: Box) {
         let offset = new Coordinate(10, 0);
 
         if (positionAtAnchor(
@@ -933,7 +958,7 @@ class ElementTooltipPosition extends AnchoredPosition {
                 Overflow.ADJUST_X |
                 Overflow.ADJUST_Y);
         }
-    };
+    }
 
 
 }

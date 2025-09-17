@@ -1,29 +1,16 @@
-goog.provide('recoil.ui.widgets.table.TableWidget');
-
-goog.require('goog.dom.classes');
-goog.require('goog.string');
-goog.require('goog.structs.AvlTree');
-goog.require('goog.ui.Component');
-goog.require('goog.ui.Container');
-goog.require('recoil.frp.Behaviour');
-goog.require('recoil.frp.Util');
-goog.require('recoil.frp.table.TableCell');
-goog.require('recoil.structs.table.Table');
-goog.require('recoil.structs.table.TableRow');
-goog.require('recoil.ui.AttachableWidget');
-goog.require('recoil.ui.BoolWithExplanation');
-goog.require('recoil.ui.ComponentWidgetHelper');
-goog.require('recoil.ui.RenderedDecorator');
-goog.require('recoil.ui.widgets.LabelWidget');
-goog.require('recoil.ui.widgets.TableMetaData');
-goog.require('recoil.ui.widgets.table.Column');
-goog.require('recoil.ui.widgets.table.StringColumn');
-
-
 /**
  * @typedef {{key:!Array,rowPos:number, meta:!Object,keyCols: !Array<!recoil.structs.table.ColumnKey>,cellMeta:Object<string,Object>}}
  */
-recoil.ui.widgets.table.RowAndCellMeta_;
+import {WidgetScope} from "../widgetscope";
+import {StructType} from "../../../frp/struct";
+import {Table, TableMetaType} from "../../../structs/table/table";
+import {AvlTree} from "../../../structs/avltree";
+
+export type TypeFactoryMap = {
+    [index:string]: (meta:StructType) => Column,
+}
+
+private type RowAndCellMeta_;
 
 /**
  * @typedef {goog.structs.AvlTree<recoil.ui.widgets.table.RowAndCellMeta_>}
@@ -38,7 +25,7 @@ recoil.ui.widgets.table.TableInfo_;
 /**
  * @typedef {{rows:goog.structs.AvlTree,headerCols:Array, headerRow:Object}}
  */
-recoil.ui.widgets.table.RenderState_;
+type RenderState_ = {rows:AvlTree<xxx>, headerCols:xxx[], headerRow:xxx};
 
 
 /**
@@ -46,139 +33,142 @@ recoil.ui.widgets.table.RenderState_;
  * @param {!recoil.ui.WidgetScope} scope
  * @implements recoil.ui.AttachableWidget
  */
-recoil.ui.widgets.table.TableWidget = function(scope) {
-    this.scope_ = scope;
-    this.container_ = new goog.ui.Component();
-    this.container_.createDom();
-    this.helper_ = new recoil.ui.ComponentWidgetHelper(scope, this.container_, this, this.updateState_);
-    this.selectNewRow_ = false;
-    var me = this;
-    this.rowClickHelper_ = new recoil.ui.ComponentWidgetHelper(scope, this.container_, this, function() {});
+export class TableWidget {
 
-    var applyClass = function(node, cls) {
-        goog.dom.setProperties(node, {class: cls});
-        var children = goog.dom.getChildren(node);
-        for (var i = 0; i < children.length; i++) {
-            console.log(children.item(i));
-//            applyClass(children.item(i), cls);
-        }
-    };
-    var SelectionMode = recoil.ui.widgets.table.TableWidget.SelectionMode;
-
-    this.selectionHelper_ = new recoil.ui.ComponentWidgetHelper(scope, this.container_, this, function(helper, selectedB, selectMetaB) {
-        var i = 0;
-        var row;
-        var selector;
-        if (helper.isGood()) {
-            var selected = selectedB.get();
-            var selectMeta = selectMetaB.get();
-            var canSelect = selectMeta.canSelect;
-            for (i = 0; i < me.curSelected_.length; i++) {
-                var rowMeta = selectMeta.rowMeta.findFirst({key: me.curSelected_[i]});
-                selector = me.getMetaValue('rowSelector', selectMetaB.table, rowMeta ? rowMeta.meta : undefined);
-                row = me.renderState_.rows.findFirst({key: me.curSelected_[i]});
-                if (row) {
-                    selector(row.outer, false);
-                }
-            }
-
-            for (i = 0; i < selected.length; i++) {
-                selector = me.getMetaValue('rowSelector', selectMeta.table, selectMeta.rowMeta.findFirst({key: selected[i]}));
-                row = me.renderState_.rows.findFirst({key: selected[i]});
-                if (row) {
-                    selector(row.outer, canSelect);
-                }
-            }
-            me.curSelected_ = selected;
-        }
-
-    });
-    // the state the current table we are displaying (only the important stuff)
-    this.state_ = recoil.ui.widgets.table.TableWidget.emptyState_();
-    // information on what we are currently rendering
-    this.renderState_ = {
-        rows: new goog.structs.AvlTree(recoil.ui.widgets.table.TableWidget.rowMetaCompare_),
-        headerCols: []
-    };
-    this.curSelected_ = [];
-    this.selected_ = this.scope_.getFrp().createB([]);
-    this.lastClickedB_ = this.scope_.getFrp().createB(null);
-    // this will keep the current table in it, it will allow us to get selected before
-    // we have attached a table
-    this.tableBB_ = this.scope_.getFrp().createNotReadyB();
-
-    this.rowClickEvent_ = scope.getFrp().createCallback(function(e, selectedB, tableB, lastB) {
+    constructor(scope:WidgetScope) {
+        this.scope_ = scope;
+        this.container_ = new goog.ui.Component();
+        this.container_.createDom();
+        this.helper_ = new recoil.ui.ComponentWidgetHelper(scope, this.container_, this, this.updateState_);
         this.selectNewRow_ = false;
-        var oldSelected = selectedB.get();
-        var mode = tableB.get().getMeta().selectionMode || SelectionMode.SINGLE;
-        var clickRow = tableB.get().getRow(e.data);
-        if (!clickRow || clickRow.getMeta().selectable === false) {
-            return;
-        }
-        var keyEqual = function(x) {
-                return recoil.util.isEqual(x, e.data);
+        var me = this;
+        this.rowClickHelper_ = new recoil.ui.ComponentWidgetHelper(scope, this.container_, this, function () {
+        });
+
+        var applyClass = function (node, cls) {
+            goog.dom.setProperties(node, {class: cls});
+            var children = goog.dom.getChildren(node);
+            for (var i = 0; i < children.length; i++) {
+                console.log(children.item(i));
+//            applyClass(children.item(i), cls);
+            }
         };
-        if (mode === SelectionMode.SINGLE) {
-            if (!goog.array.find(oldSelected, keyEqual)) {
-                selectedB.set([e.data]);
-            }
-            lastB.set(e.data);
-        }
-        else if (mode === SelectionMode.MULTI) {
-            if (e.event.ctrlKey) {
+        var SelectionMode = recoil.ui.widgets.table.TableWidget.SelectionMode;
 
-                var found = goog.array.find(oldSelected, keyEqual);
-                if (found) {
-                    selectedB.set(oldSelected.filter(function(v) {
-                        return !keyEqual(v);
-                    }));
+        this.selectionHelper_ = new recoil.ui.ComponentWidgetHelper(scope, this.container_, this, function (helper, selectedB, selectMetaB) {
+            var i = 0;
+            var row;
+            var selector;
+            if (helper.isGood()) {
+                var selected = selectedB.get();
+                var selectMeta = selectMetaB.get();
+                var canSelect = selectMeta.canSelect;
+                for (i = 0; i < me.curSelected_.length; i++) {
+                    var rowMeta = selectMeta.rowMeta.findFirst({key: me.curSelected_[i]});
+                    selector = me.getMetaValue('rowSelector', selectMetaB.table, rowMeta ? rowMeta.meta : undefined);
+                    row = me.renderState_.rows.findFirst({key: me.curSelected_[i]});
+                    if (row) {
+                        selector(row.outer, false);
+                    }
                 }
-                else {
-                    selectedB.set(oldSelected.concat([e.data]));
+
+                for (i = 0; i < selected.length; i++) {
+                    selector = me.getMetaValue('rowSelector', selectMeta.table, selectMeta.rowMeta.findFirst({key: selected[i]}));
+                    row = me.renderState_.rows.findFirst({key: selected[i]});
+                    if (row) {
+                        selector(row.outer, canSelect);
+                    }
+                }
+                me.curSelected_ = selected;
+            }
+
+        });
+        // the state the current table we are displaying (only the important stuff)
+        this.state_ = recoil.ui.widgets.table.TableWidget.emptyState_();
+        // information on what we are currently rendering
+        this.renderState_ = {
+            rows: new goog.structs.AvlTree(recoil.ui.widgets.table.TableWidget.rowMetaCompare_),
+            headerCols: []
+        };
+        this.curSelected_ = [];
+        this.selected_ = this.scope_.getFrp().createB([]);
+        this.lastClickedB_ = this.scope_.getFrp().createB(null);
+        // this will keep the current table in it, it will allow us to get selected before
+        // we have attached a table
+        this.tableBB_ = this.scope_.getFrp().createNotReadyB();
+
+        this.rowClickEvent_ = scope.getFrp().createCallback(function (e, selectedB, tableB, lastB) {
+            this.selectNewRow_ = false;
+            var oldSelected = selectedB.get();
+            var mode = tableB.get().getMeta().selectionMode || SelectionMode.SINGLE;
+            var clickRow = tableB.get().getRow(e.data);
+            if (!clickRow || clickRow.getMeta().selectable === false) {
+                return;
+            }
+            var keyEqual = function (x) {
+                return recoil.util.isEqual(x, e.data);
+            };
+            if (mode === SelectionMode.SINGLE) {
+                if (!goog.array.find(oldSelected, keyEqual)) {
+                    selectedB.set([e.data]);
                 }
                 lastB.set(e.data);
-            }
-            else if (e.event.shiftKey && lastB.get() !== null && tableB.get().getRow(lastB.get())) {
-                var newSelected = [];
-                var started = false;
-                var finished = false;
-                var tbl = tableB.get();
-                tbl.forEach(function(row, pks) {
-                    if (finished) {
-                        return;
+            } else if (mode === SelectionMode.MULTI) {
+                if (e.event.ctrlKey) {
+
+                    var found = goog.array.find(oldSelected, keyEqual);
+                    if (found) {
+                        selectedB.set(oldSelected.filter(function (v) {
+                            return !keyEqual(v);
+                        }));
+                    } else {
+                        selectedB.set(oldSelected.concat([e.data]));
                     }
+                    lastB.set(e.data);
+                } else if (e.event.shiftKey && lastB.get() !== null && tableB.get().getRow(lastB.get())) {
+                    var newSelected = [];
+                    var started = false;
+                    var finished = false;
+                    var tbl = tableB.get();
+                    tbl.forEach(function (row, pks) {
+                        if (finished) {
+                            return;
+                        }
 
-                    var matches = recoil.util.isEqual(pks, lastB.get()) || recoil.util.isEqual(pks, e.data);
-                    if (matches) {
-                        newSelected.push(pks);
-                        finished = started;
-                        started = true;
-                    }
-                    else if (started) {
-                        newSelected.push(pks);
-                    }
-                });
-                selectedB.set(newSelected);
+                        var matches = recoil.util.isEqual(pks, lastB.get()) || recoil.util.isEqual(pks, e.data);
+                        if (matches) {
+                            newSelected.push(pks);
+                            finished = started;
+                            started = true;
+                        } else if (started) {
+                            newSelected.push(pks);
+                        }
+                    });
+                    selectedB.set(newSelected);
+                } else {
+                    selectedB.set([e.data]);
+                    lastB.set(e.data);
+                }
             }
-            else {
-                selectedB.set([e.data]);
-                lastB.set(e.data);
-            }
-        }
 
 
-    }, this.selected_, this.scope_.getFrp().switchB(this.tableBB_), this.lastClickedB_);
-    this.rowClickHelper_.attach(this.rowClickEvent_);
-};
+        }, this.selected_, this.scope_.getFrp().switchB(this.tableBB_), this.lastClickedB_);
+        this.rowClickHelper_.attach(this.rowClickEvent_);
+    }
 
-/**
- * use this when adding for the table widget to select a new row
- * this highlight which row was added to the user
- *
- */
-recoil.ui.widgets.table.TableWidget.prototype.selectNewRow = function() {
-    this.selectNewRow_ = true;
-};
+    static create(tableMeta:TypeFactoryMap, columnMeta:TableMetaType, rawTable:StructType[], opt_ordered?:boolean):Table {
+        return Table.create(tableMeta, columnMeta, rawTable, opt_ordered);
+    }
+
+
+    /**
+     * use this when adding for the table widget to select a new row
+     * this highlight which row was added to the user
+     *
+     */
+    selectNewRow() {
+        this.selectNewRow_ = true;
+    }
 
 /**
  * this should be called after the attach this way it can filter out the

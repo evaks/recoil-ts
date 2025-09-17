@@ -1,4 +1,4 @@
-import {Behaviour, BStatus} from "../../frp/frp";
+import {Behaviour, BStatus} from "../../frp/frp.ts";
 
 /**
  * this uses local or session storage to cache values behaviours

@@ -2,7 +2,7 @@ import assert from 'assert/strict';
 import test from 'node:test';
 
 
-import {decimal64ToFixed} from './number'
+import {decimal64ToFixed} from './number.ts'
 
 test("to fixed", () => {
     var toFixed = decimal64ToFixed;

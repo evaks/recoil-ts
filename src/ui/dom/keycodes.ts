@@ -252,7 +252,7 @@ export class KeyCodes {
      * @param e A key event.
      * @return Whether it's a text modifying key.
      */
-    static isTextModifyingKeyEvent(e:BrowserEvent):boolean {
+    static isTextModifyingKeyEvent(e:KeyboardEvent):boolean {
         if (!(e instanceof KeyboardEvent)) {
             return false;
         }
@@ -267,38 +267,35 @@ export class KeyCodes {
         // The following keys are quite harmless, even in combination with
         // CTRL, ALT or SHIFT.
         switch (e.key) {
-            case KeyCodes.ALT:
-            case KeyCodes.CAPS_LOCK:
-            case KeyCodes.CONTEXT_MENU:
-            case KeyCodes.CTRL:
-            case KeyCodes.DOWN:
-            case KeyCodes.END:
-            case KeyCodes.ESC:
-            case KeyCodes.HOME:
-            case KeyCodes.INSERT:
-            case KeyCodes.LEFT:
-            case KeyCodes.MAC_FF_META:
-            case KeyCodes.META:
-            case KeyCodes.NUMLOCK:
-            case KeyCodes.NUM_CENTER:
-            case KeyCodes.PAGE_DOWN:
-            case KeyCodes.PAGE_UP:
-            case KeyCodes.PAUSE:
-            case KeyCodes.PHANTOM:
-            case KeyCodes.PRINT_SCREEN:
-            case KeyCodes.RIGHT:
-            case KeyCodes.SCROLL_LOCK:
-            case KeyCodes.SHIFT:
-            case KeyCodes.UP:
-            case KeyCodes.VK_NONAME:
-            case KeyCodes.WIN_KEY:
-            case KeyCodes.WIN_KEY_RIGHT:
+            case "Alt":
+            case "CapsLock":
+            case "ContextMenu":
+            case "Control":
+            case "ArrowDown":
+            case "End":
+            case "Escape":
+            case "Home":
+            case "Insert":
+            case "ArrowLeft":
+            case "Meta":
+            case "NumLock":
+            case "Clear":
+            case "PageDown":
+            case "PageUp":
+            case "Pause":
+            case "WakeUp":
+            case "F13":
+            case "RightArrow":
+            case "ScrollLock":
+            case "Shift":
+            case "UpArrow":
+            case "Meta":
                 return false;
-            case KeyCodes.WIN_KEY_FF_LINUX:
-                return !userAgent.GECKO;
             default:
-                return e.keyCode < KeyCodes.FIRST_MEDIA_KEY ||
-                    e.keyCode > KeyCodes.LAST_MEDIA_KEY;
+                return !["BrowserBack","BrowserForward","BrowserRefresh","AudioVolumeDown",
+                    "AudioVolumeUp","MediaTrackNext","MediaTrackPrevious","MediaStop",
+                    "MediaPlayPause","LaunchMail","AudioVolumeMute","VolumeMute","AudioVolumeDown",
+                    "VolumeDown","AudioVolumeUp"].includes(e.key);
         }
     }
 

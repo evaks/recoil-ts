@@ -1,21 +1,3 @@
-goog.provide('recoil.ui.widgets.TextAreaWidget');
-
-goog.require('goog.events.InputHandler');
-goog.require('goog.ui.Component');
-goog.require('goog.ui.Container');
-goog.require('goog.ui.Textarea');
-goog.require('goog.ui.TextareaRenderer');
-goog.require('recoil.frp.Behaviour');
-goog.require('recoil.frp.Util');
-goog.require('recoil.frp.struct');
-goog.require('recoil.ui.ComponentWidgetHelper');
-goog.require('recoil.ui.EventHelper');
-goog.require('recoil.ui.LabeledWidget');
-goog.require('recoil.ui.Widget');
-goog.require('recoil.ui.WidgetHelper');
-goog.require('recoil.ui.WidgetScope');
-goog.require('recoil.ui.widgets.LabelWidget');
-
 /**
  * @implements {recoil.ui.LabeledWidget}
  * @param {!recoil.ui.WidgetScope} scope
@@ -38,8 +20,8 @@ recoil.ui.widgets.TextAreaWidget = function(scope) {
  * @private
  */
 recoil.ui.widgets.TextAreaWidget.prototype.detach_ = function() {
-    var frp = this.helper_.getFrp();
-    var me = this;
+    let frp = this.helper_.getFrp();
+    let me = this;
     frp.accessTrans(function() {
         if (me.immediateB_.good() && me.valueB_.good() && !me.immediateB_.get()) {
             me.valueB_.set(me.textarea_.getValue());
@@ -82,7 +64,7 @@ recoil.ui.widgets.TextAreaWidget.prototype.getLabel = function() {
  * @param {!recoil.frp.Behaviour<!recoil.ui.BoolWithExplanation>=} opt_enabledB
  */
 recoil.ui.widgets.TextAreaWidget.prototype.attach = function(nameB, valueB, opt_enabledB) {
-    var frp = this.helper_.getFrp();
+    let frp = this.helper_.getFrp();
 
     this.attachStruct({'name': nameB, 'value': valueB, 'enabled': opt_enabledB });
 };
@@ -91,11 +73,11 @@ recoil.ui.widgets.TextAreaWidget.prototype.attach = function(nameB, valueB, opt_
  * @param {!Object| !recoil.frp.Behaviour<Object>} options
  */
 recoil.ui.widgets.TextAreaWidget.prototype.attachStruct = function(options) {
-    var frp = this.helper_.getFrp();
-    var util = new recoil.frp.Util(frp);
+    let frp = this.helper_.getFrp();
+    let util = new recoil.frp.Util(frp);
 
-    var structs = recoil.frp.struct;
-    var optionsB = structs.flatten(frp, options);
+    let structs = recoil.frp.struct;
+    let optionsB = structs.flatten(frp, options);
 
     this.maxLengthB_ = structs.get('maxLength', optionsB, null);
     this.valueB_ = structs.get('value', optionsB);
@@ -105,7 +87,7 @@ recoil.ui.widgets.TextAreaWidget.prototype.attachStruct = function(options) {
     this.enabledB_ = structs.get('enabled', optionsB, recoil.ui.BoolWithExplanation.TRUE);
     this.editableB_ = structs.get('editable', optionsB, true);
     this.placeholderB_ = structs.get('placeholder', optionsB, null);
-    var readyB = util.isAllGoodExplain(this.valueB_, this.enabledB_);
+    let readyB = util.isAllGoodExplain(this.valueB_, this.enabledB_);
 
     this.label_.attach(
           structs.get('name', optionsB),
@@ -114,7 +96,7 @@ recoil.ui.widgets.TextAreaWidget.prototype.attachStruct = function(options) {
     this.helper_.attach(this.valueB_, this.immediateB_, this.enabledB_, this.editableB_, this.placeholderB_, this.maxLengthB_);
     this.configHelper_.attach(this.minHeightB_, this.displayLengthB_);
 
-    var me = this;
+    let me = this;
     this.changeHelper_.listen(this.scope_.getFrp().createCallback(function(v) {
         if (me.immediateB_.get()) {
             me.valueB_.set(v.target.value);
@@ -138,7 +120,7 @@ recoil.ui.widgets.TextAreaWidget.prototype.attachStruct = function(options) {
  */
 recoil.ui.widgets.TextAreaWidget.prototype.updateState_ = function(helper) {
 
-    var len = this.maxLengthB_.good() && this.maxLengthB_.get() ? this.maxLengthB_.get() : undefined;
+    let len = this.maxLengthB_.good() && this.maxLengthB_.get() ? this.maxLengthB_.get() : undefined;
     if (!this.textarea_.getElement()) {
         this.textarea_.createDom();
     }

@@ -115,3 +115,72 @@ export function htmlEscape(str:string, opt_isLikelyToContainHtmlChars?:boolean) 
 export function canonicalizeNewlines(str:string):string {
     return str.replace(/(\r\n|\r|\n)/g, '\n');
 }
+
+/**
+ * Converts a string from selector-case to camelCase (e.g. from
+ * "multi-part-string" to "multiPartString"), useful for converting
+ * CSS selectors and HTML dataset keys to their equivalent JS properties.
+ * @param {string} str The string in selector-case form.
+ * @return {string} The string in camelCase form.
+ */
+export function toCamelCase (str:string):string {
+    return String(str).replace(
+        /\-([a-z])/g, function(all, match) { return match.toUpperCase(); });
+}
+
+/**
+ * Converts a string into TitleCase. First character of the string is always
+ * capitalized in addition to the first letter of every subsequent word.
+ * Words are delimited by one or more whitespaces by default. Custom delimiters
+ * can optionally be specified to replace the default, which doesn't preserve
+ * whitespace delimiters and instead must be explicitly included if needed.
+ *
+ * Default delimiter => " ":
+ *    toTitleCase('oneTwoThree')    => 'OneTwoThree'
+ *    toTitleCase('one two three')  => 'One Two Three'
+ *    toTitleCase('  one   two   ') => '  One   Two   '
+ *    toTitleCase('one_two_three')  => 'One_two_three'
+ *    toTitleCase('one-two-three')  => 'One-two-three'
+ *
+ * Custom delimiter => "_-.":
+ *    toTitleCase('oneTwoThree', '_-.')       => 'OneTwoThree'
+ *    toTitleCase('one two three', '_-.')     => 'One two three'
+ *    toTitleCase('  one   two   ', '_-.')    => '  one   two   '
+ *    toTitleCase('one_two_three', '_-.')     => 'One_Two_Three'
+ *    toTitleCase('one-two-three', '_-.')     => 'One-Two-Three'
+ *    toTitleCase('one...two...three', '_-.') => 'One...Two...Three'
+ *    toTitleCase('one. two. three', '_-.')   => 'One. two. three'
+ *    toTitleCase('one-two.three', '_-.')     => 'One-Two.Three'
+ *
+ * @param str String value in camelCase form.
+ * @param opt_delimiters Custom delimiter character set used to
+ *      distinguish words in the string value. Each character represents a
+ *      single delimiter. When provided, default whitespace delimiter is
+ *      overridden and must be explicitly included if needed.
+ * @return String value in TitleCase form.
+ */
+export function toTitleCase (str:string, opt_delimiters?:string):string {
+    var delimiters = typeof (opt_delimiters) === "string"  ?
+        regExpEscape(opt_delimiters) :
+        '\\s';
+
+    // For IE8, we need to prevent using an empty character set. Otherwise,
+    // incorrect matching will occur.
+    delimiters = delimiters ? '|[' + delimiters + ']+' : '';
+
+    let regexp = new RegExp('(^' + delimiters + ')([a-z])', 'g');
+    return str.replace(
+        regexp, (all:string, p1:string, p2:string)=> { return p1 + p2.toUpperCase(); });
+}
+
+/**
+ * Escapes characters in the string that are not safe to use in a RegExp.
+ * @param {*} s The string to escape. If not a string, it will be casted
+ *     to one.
+ * @return {string} A RegExp safe, escaped copy of {@code s}.
+ */
+export function regExpEscape(s:any):string {
+    return String(s)
+        .replace(/([-()\[\]{}+?*.$\^|,:#<!\\])/g, '\\$1')
+        .replace(/\x08/g, '\\x08');
+}

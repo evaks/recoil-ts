@@ -14,13 +14,12 @@
 
 
 import {contains, getFrameContentDocument, getOwnerDocument, setElementShown} from "./dom/dom";
-import {Transition} from "./fx/transition";
+import type {Transition} from "./fx/transition";
 import {TagName} from "./dom/tags";
 import {userAgent} from "./dom/useragent";
-import {EventType as DomEventType} from "./dom/eventType";
+import {EventType as DomEventType} from "./dom/eventtype";
 import {EventType as TransEventType} from "./fx/transition";
-import {EventHandler, EventHelper, Unlistener} from "./eventhelper";
-import {KeyCodes} from "./dom/keycodes";
+import {EventHandler,} from "./eventhelper";
 
 export enum Type {
     TOGGLE_DISPLAY = 'toggle_display',
@@ -28,35 +27,9 @@ export enum Type {
 }
 
 
-export class BrowserEvent implements Event {
-    bubbles: boolean;
-    cancelBubble: boolean;
-    cancelable: boolean;
-    composed: boolean;
-    currentTarget: EventTarget | null;
-    defaultPrevented: boolean;
-    eventPhase: number;
-    isTrusted: boolean;
-    returnValue: boolean;
-    srcElement: EventTarget | null;
-    target: EventTarget | null;
-    timeStamp: number;
-    type: string;
+export class BrowserEvent extends Event {
     constructor(type: string, curTarget:EventTarget, src:Event) {
-        this.bubbles = src.bubbles;
-        this.cancelBubble = src.cancelBubble;
-        this.cancelable = src.cancelable;
-        this.composed = src.composed;
-        this.target = src.target;
-        this.timeStamp = src.timeStamp;
-        this.currentTarget = curTarget;
-        this.defaultPrevented = src.defaultPrevented;
-        this.eventPhase = 0;
-        this.isTrusted =src.isTrusted;
-        this.returnValue = src.returnValue;
-        this.srcElement = src.srcElement;
-        this.type = type;
-
+        super(type);
     }
 
     readonly NONE: 0 = 0;
@@ -64,21 +37,6 @@ export class BrowserEvent implements Event {
     readonly AT_TARGET: 2 = 2;
     readonly BUBBLING_PHASE: 3 = 3;
 
-    composedPath(): EventTarget[] {
-        throw new Error("Method not implemented.");
-    }
-    initEvent(type: string, bubbles?: boolean, cancelable?: boolean): void {
-        throw new Error("Method not implemented.");
-    }
-    preventDefault(): void {
-        throw new Error("Method not implemented.");
-    }
-    stopImmediatePropagation(): void {
-        throw new Error("Method not implemented.");
-    }
-    stopPropagation(): void {
-        throw new Error("Method not implemented.");
-    }
 
 }
 /**
@@ -181,7 +139,7 @@ export abstract class PopupBase extends EventTarget{
     static DEBOUNCE_DELAY_MS:number = 150;
 
 
-    private getType():Type {
+    public getType():Type {
         return this.type_;
     };
 
@@ -217,7 +175,7 @@ export abstract class PopupBase extends EventTarget{
      *
      * @return {Element} The popup element.
      */
-    private getElement() {
+    protected getElement() {
         return this.element_;
     }
 
@@ -399,7 +357,7 @@ export abstract class PopupBase extends EventTarget{
 
 
     /**
-     * Repositions the popup according to the current state.
+     * Repositions the popup according to the current state.6
      * Should be overriden by subclases.
      */
     abstract reposition():void;
@@ -528,7 +486,7 @@ export abstract class PopupBase extends EventTarget{
      * @return {boolean} Whether the popup was hidden and not cancelled.
      * @private
      */
-    private hide_(opt_target?: Event) {
+    private hide_(opt_target?: Event|null) {
         // Give derived classes and handlers a chance to cancel hiding.
         if (!this.isVisible_ || !this.onBeforeHide(opt_target)) {
             return false;
@@ -565,7 +523,7 @@ export abstract class PopupBase extends EventTarget{
      * @param opt_target Target of the event causing the hide.
      * @private
      */
-    private continueHidingPopup_(opt_target?:Event) {
+    private continueHidingPopup_(opt_target?:Event|null) {
         // Hide the popup.
         if (this.type_ == Type.TOGGLE_DISPLAY) {
             if (this.shouldHideAsync_) {
@@ -638,12 +596,12 @@ export abstract class PopupBase extends EventTarget{
      * Called before the popup is hidden. Derived classes can override to hook this
      * event but should make sure to call the parent class method.
      *
-     * @param {?Node=} opt_target Target of the event causing the hide.
-     * @return {boolean} If anyone called preventDefault on the event object (or
+     * @param opt_target Target of the event causing the hide.
+     * @return If anyone called preventDefault on the event object (or
      *     if any of the handlers returns false this will also return false.
      * @protected
      */
-    private onBeforeHide(opt_srcEvent?:Event): boolean {
+    protected onBeforeHide(opt_srcEvent?:Event|null): boolean {
         if (opt_srcEvent) {
             return this.dispatchEvent(new BrowserEvent(EventType.BEFORE_HIDE, this, opt_srcEvent))
         }
@@ -659,7 +617,7 @@ export abstract class PopupBase extends EventTarget{
      * @param {?Node=} opt_target Target of the event causing the hide.
      * @protected
      */
-    private onHide(opt_srcEvent?:Event) {
+    protected onHide(opt_srcEvent?:Event|null) {
         if (opt_srcEvent) {
             this.dispatchEvent(new BrowserEvent(EventType.HIDE, this, opt_srcEvent));
         }
@@ -677,13 +635,13 @@ export abstract class PopupBase extends EventTarget{
      * @private
      */
     private onDocumentMouseDown_(e:MouseEvent) {
-        var target = e.target as Element;
+        let target = e.target as Element;
 
         if (!contains(this.element_, target) &&
             !this.isOrWithinAutoHidePartner_(target) &&
             this.isWithinAutoHideRegion_(target) && !this.shouldDebounce_()) {
             // Mouse click was outside popup and partners, so hide.
-            this.hide_(target);
+            this.hide_(e);
         }
     };
 
@@ -696,7 +654,7 @@ export abstract class PopupBase extends EventTarget{
      */
     private onDocumentKeyDown_(e:KeyboardEvent) {
         if (e.key == "Escape") {
-            if (this.hide_(e.target)) {
+            if (this.hide_(e)) {
                 // Eat the escape key, but only if this popup was actually closed.
                 e.preventDefault();
                 e.stopPropagation();
@@ -779,7 +737,7 @@ export abstract class PopupBase extends EventTarget{
         return new Date().getTime() - this.lastShowTime_ < PopupBase.DEBOUNCE_DELAY_MS;
     }
 
-    private disposeInternal() {
+    protected disposeInternal() {
         this.handler_.unlisten();
         this.autoHidePartners_.clear();
     }

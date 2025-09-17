@@ -1,10 +1,10 @@
-import {BStatus, Frp} from "./frp";
+import {BStatus, Frp} from "./frp.ts";
 
 import assert from "assert/strict";
 import test from "node:test";
-import {dateB, memoryB, memoryOnlyB, timeB, Util} from "./util";
-import {StructType} from "./struct";
-import {wait} from "../util/promises";
+import {dateB, memoryB, memoryOnlyB, timeB, Util} from "./util.ts";
+import {StructType} from "./struct.ts";
+import {wait} from "../util/promises.ts";
 
 test("structLiftBI", () => {
     let frp = new Frp();

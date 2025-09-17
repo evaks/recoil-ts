@@ -4,10 +4,10 @@
  * on the screen and providing a tooltip showing way something is disabled
  */
 
-import {Message} from "./message";
-import {Behaviour, BehaviourList1, BStatus, Frp, Status} from "../frp/frp";
-import {Messages} from "./messages";
-import {Util} from "../frp/util";
+import {Message} from "./message.ts";
+import {Behaviour, BehaviourList1, BStatus, Frp, Status} from "../frp/frp.ts";
+import {Messages} from "./messages.ts";
+import {Util} from "../frp/util.ts";
 
 export class BoolWithExplanation {
     private val_:boolean;
@@ -38,6 +38,12 @@ export class BoolWithExplanation {
         return this.val_ ? this.true_ : this.false_;
     }
 
+    trueReason():Message|null {
+        return this.true_;
+    }
+    falseReason():Message|null {
+        return this.false_;
+    }
     not() :BoolWithExplanation{
         return new BoolWithExplanation(!this.val_, this.false_, this.true_);
     }

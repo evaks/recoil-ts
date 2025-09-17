@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import {BStatus, Frp} from "./frp";
-import {create, extend, FLATTEN, flatten, getBehaviours, NO_FLATTEN} from "./struct";
+import {BStatus, Frp} from "./frp.ts";
+import {create, extend, FLATTEN, flatten, getBehaviours, getWithStatusIfNotGood, NO_FLATTEN} from "./struct.ts";
 
-import * as struct  from "./struct";
+import * as struct  from "./struct.ts";
 
 function arrayEqualsOrderIrrelevant(actual:any[], expected:any[]): void {
     assert.equal(actual.length, expected.length);
@@ -59,13 +59,13 @@ test("getSubset()", () => {
     frp.tm().detach(resB);
 });
 
-test("getMeta()", () => {
+test("getWithStatusIfNotGood()", () => {
     let frp = new Frp();
 
     let valB = frp.createB({a: 1, b: BStatus.notReady(), c: new BStatus(3)});
-    let aB = struct.getMeta('a', valB);
-    let bB = struct.getMeta('b', valB);
-    let cB = struct.getMeta('c', valB);
+    let aB = struct.getWithStatusIfNotGood('a', valB);
+    let bB = struct.getWithStatusIfNotGood('b', valB);
+    let cB = struct.getWithStatusIfNotGood('c', valB);
 
     frp.attach(aB);
     frp.attach(bB);

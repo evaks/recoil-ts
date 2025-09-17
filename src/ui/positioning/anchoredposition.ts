@@ -19,7 +19,7 @@ import {Size} from "../dom/size";
 
 export class AnchoredPosition extends AbstractPosition {
     readonly element: Element;
-    private overflow_: number | undefined;
+    private readonly overflow_: number | undefined;
     readonly corner: Corner;
 
     /**
@@ -30,11 +30,11 @@ export class AnchoredPosition extends AbstractPosition {
      * specified in the Popup constructor or Popup.setElement be absolutely
      * positioned.
      *
-     * @param {Element} anchorElement Element the movable element should be
+     * @param anchorElement Element the movable element should be
      *     anchored against.
-     * @param {goog.positioning.Corner} corner Corner of anchored element the
+     * @param corner Corner of anchored element the
      *     movable element should be positioned at.
-     * @param {number=} opt_overflow Overflow handling mode. Defaults to IGNORE if
+     * @param opt_overflow Overflow handling mode. Defaults to IGNORE if
      *     not specified. Bitmap, {@see goog.positioning.Overflow}.
      */
     constructor(
@@ -49,11 +49,11 @@ export class AnchoredPosition extends AbstractPosition {
     /**
      * Repositions the movable element.
      *
-     * @param {Element} movableElement Element to position.
-     * @param {goog.positioning.Corner} movableCorner Corner of the movable element
+     * @param movableElement Element to position.
+     * @param movableCorner Corner of the movable element
      *     that should be positioned adjacent to the anchored element.
-     * @param {goog.math.Box=} opt_margin A margin specifin pixels.
-     * @param {goog.math.Size=} opt_preferredSize PreferredSize of the
+     * @param opt_margin A margin specifin pixels.
+     * @param opt_preferredSize PreferredSize of the
      *     movableElement (unused in this class).
      * @override
      */

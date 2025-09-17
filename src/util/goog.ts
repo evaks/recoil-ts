@@ -1,3 +1,6 @@
+import {Message} from "../ui/message.ts";
+import {StructType} from "../frp/struct.ts";
+
 /**
  * This is a "fixed" version of the typeof operator.  It differs from the typeof
  * operator in such a way that null returns 'null' and arrays return 'array'.
@@ -96,7 +99,7 @@ export function typeOf(value:any):string {
     return s;
 }
 
-export function isObject (val:any):boolean {
+export function isObject (val:unknown):val is StructType {
     let type = typeOf(val);
     return type == 'object' && val != null || type == 'function';
     // return Object(val) === val also works, but is slower, especially if val is
@@ -105,6 +108,9 @@ export function isObject (val:any):boolean {
 
 export function isString(val:any):boolean {
     return typeof val === 'string';
+}
+export function isStringOrMessage(val:any):boolean {
+    return typeof val === 'string' || val instanceof Message;
 }
 
 export function isArray(val:any):boolean {
@@ -115,6 +121,10 @@ export function assert(val:any, msg?:string){
     if (!val) {
         throw Error(msg);
     }
+}
+
+export function fail(val:any, msg?:string):never{
+    throw Error(msg);
 }
 
 export function toRadians(angleDegrees:number):number {

@@ -1,6 +1,6 @@
-import {Behaviour, Frp} from "../../frp/frp";
-import {Serializer, Cache} from "./cache";
-import {Util} from "../../frp/util";
+import {Behaviour, Frp} from "../../frp/frp.ts";
+import {type Serializer, Cache} from "./cache.ts";
+import {Util} from "../../frp/util.ts";
 
 
 export class LocalBehaviour {
@@ -39,7 +39,7 @@ export class LocalBehaviour {
     /**
      * creates a local session storage, this will use both session
      * local, session will override the local storage, but will write to both
-     * this write to both, this is useful if you want to new tabs have information
+     * this writes to both, this is useful if you want to new tabs have information
      * of the old tab when opened but maintain its new copy
      *
      * @param frp the frp engine

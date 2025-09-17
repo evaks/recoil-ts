@@ -1,10 +1,11 @@
-import {UniquePriorityQueue} from "../structs/uniquepriorityqueue";
-import Sequence from "../util/sequence"
-import {isEqual} from "../util/object";
-import {LoopDetected, NoAccessors, NotAttached, NotInTransaction} from "../exception/exception";
-import {SerializedSet, SerializedMap} from "../structs/serialized_collections";
-import {removeIf} from "../structs/array";
-import assert from "assert/strict";
+import {UniquePriorityQueue} from "../structs/uniquepriorityqueue.ts";
+import Sequence from "../util/sequence.ts"
+import {isEqual} from "../util/object.ts";
+import {LoopDetected, NoAccessors, NotAttached, NotInTransaction} from "../exception/exception.ts";
+import {SerializedSet, SerializedMap} from "../structs/serialized_collections.ts";
+import {removeIf} from "../structs/array.ts";
+import {assert, fail} from "../util/goog.ts";
+import {Message} from "../ui/message.ts";
 
 export type BehaviourList = Behaviour<any,any, any, any>[];
 export type BehaviourList1<Type = any> = [Behaviour<Type,any, any>, ...Behaviour<Type,any, any>[]];
@@ -110,14 +111,14 @@ export class Frp {
     }
 
     /**
-     * mark the behaviour that it is being used it will now recieve update notifications
+     * mark the behaviour that it is being used it will now receive update notifications
      */
     attach(behaviour: Behaviour<any>) {
         this.transactionManager_.attach(behaviour);
     }
 
     /**
-     * mark the behaviour that it is no longer being used it will not recieve update notifications
+     * mark the behaviour that it is no longer being used it will not receive update notifications
      *
      */
     detach(behaviour: Behaviour<any>) {
@@ -238,7 +239,7 @@ export class Frp {
     }
 
     /**
-     * like access Trans however creates a function to this usefull
+     * like access Trans however creates a function to this useful
      * for things like putting it in a callback
      *
      * @return {function(...)}
@@ -390,7 +391,7 @@ export class Frp {
 
     /**
      * utilty to return a behaviour that acts like an event, the difference between events and behaviours
-     * is that events are arrays of values that have happened in the transactation phase and get cleared after that
+     * is that events are arrays of values that have happened in the transaction phase and get cleared after that
      *
      * @param func used to calculate the event that is returned
      * @param args inputs into the event
@@ -422,6 +423,9 @@ export class Frp {
         let inv = function (this:Behaviour<any>, arg:InvType,...args: Behaviour<any>[]): void {
             return func.apply(this, [arg,...args]);
         };
+        if (dependants.length === 0) {
+            dependants.push(this.createB(0))
+        }
 
         return this.liftBI(Frp.nullFunc_ as any, inv, ...dependants) as Behaviour<null,InvType>;
     }
@@ -637,18 +641,16 @@ export class Frp {
 
         return liftFunc.apply(this, newArgs).nameFunc(func, invFunc);
 
-    };
-
-    // xxxx
+    }
 }
 
-
+export type ErrorType = string|Error|Message;
 /**
  * an base interface EStatus (Event Status) and BStatus (Behaviour Status)
  *
  */
 export interface Status<InType, OutType, InvType = InType> {
-    errors(): any[];
+    errors(): ErrorType[];
 
     ready(): boolean;
 
@@ -671,7 +673,7 @@ export function isStatus(b: any):boolean {
 }
 
 /**
- * provides the status of the event, e.g. is it ready, or an error has occured
+ * provides the status of the event, e.g. is it ready, or an error has occurred
  * events are cleared every pass off of the transaction, up or down
  * events are different than behaviours the contain a queue of values
  * @template T
@@ -682,9 +684,9 @@ export function isStatus(b: any):boolean {
 
 
 export class EStatus<Type,InvType> implements Status<Type, Type[], InvType> {
-    private errors_: any[];
+    private errors_: ErrorType[];
     private values_: Type[]|InvType[];
-    private generator_: boolean;
+    private readonly generator_: boolean;
 
     constructor(generator: boolean, opt_values: any[] = []) {
         this.generator_ = generator;
@@ -714,7 +716,7 @@ export class EStatus<Type,InvType> implements Status<Type, Type[], InvType> {
         return new EStatus(generator);
     }
 
-    addError(error: any) {
+    addError(error: ErrorType) {
         this.errors_.push(error);
     }
 
@@ -764,12 +766,12 @@ export class EStatus<Type,InvType> implements Status<Type, Type[], InvType> {
 
 /**
  *
- * provides the status of the behaviour, e.g. is it ready, or an error occured
+ * provides the status of the behaviour, e.g. is it ready, or an error occurred
  *
  * outtype is the type we return for get
  */
 export class BStatus<T, OutType = T, InvType = T> implements Status<T, OutType, InvType> {
-    private errors_: Array<any>;
+    private errors_: Array<ErrorType>;
     private ready_: boolean;
     public value_: T | OutType | InvType|undefined | null;
 
@@ -787,7 +789,7 @@ export class BStatus<T, OutType = T, InvType = T> implements Status<T, OutType, 
         return res;
     }
 
-    static errors<T, OutType, InvType>(errors: any[]): BStatus<T, OutType, InvType> {
+    static errors<T, OutType, InvType>(errors: ErrorType[]): BStatus<T, OutType, InvType> {
         let res = new BStatus<T, OutType, InvType>(undefined);
         res.ready_ = true;
         res.errors_ = errors;
@@ -858,11 +860,11 @@ export class Behaviour<T, InvType = T, OutType = T, CalcType = T> {
     public origSeq_: BehaviourId;
     public accessors_: number = 0;
     public inv_: (v: Status<T, any,InvType>, ...src: Behaviour<any>[]) => void;
-    private refListeners_: ((hasListeners: boolean) => void) [] = [];
+    private readonly refListeners_: ((hasListeners: boolean) => void) [] = [];
     public providers_: Behaviour<any>[];
     private readonly calc_: (...args: any[]) => Status<T, any, InvType>;
     public dirtyUp_: boolean;
-    private refs_: { [index: string]: { manager: TransactionManager, count: number } };
+    private readonly refs_: { [index: string]: { manager: TransactionManager, count: number } };
     public dirtyDown_: boolean;
     private val_: Status<T, OutType, InvType>;
     private name_?: string;
@@ -941,7 +943,7 @@ export class Behaviour<T, InvType = T, OutType = T, CalcType = T> {
      * used for debugger gets the dependants of this behaviour
      */
     getDependants(): Behaviour<any>[] {
-        return this.frp_.tm().dependancyMap_.get(this.seq_) || [];
+        return this.frp_.tm().dependencyMap_.get(this.seq_) || [];
     }
 
     /**
@@ -1140,7 +1142,7 @@ export class Behaviour<T, InvType = T, OutType = T, CalcType = T> {
         manager: TransactionManager, dependant: Behaviour<any> | null,
         added: BehaviourIdMap<Behaviour<any>>): boolean {
         if (dependant) {
-            manager.addProvidersToDependancyMap_(dependant, this);
+            manager.addProvidersToDependencyMap(dependant, this);
         }
 
 
@@ -1181,13 +1183,14 @@ export class Behaviour<T, InvType = T, OutType = T, CalcType = T> {
         removed: BehaviourIdMap<Behaviour<any>>): boolean {
 
         if (dependant) {
-            manager.removeProvidersFromDependancyMap_(dependant, this);
+            manager.removeProvidersFromDependencyMap(dependant, this);
         }
         let curRefs = this.refs_[manager.id_];
         manager.watching_--;
 
         if (curRefs === undefined || curRefs.count < 1) {
-            assert(false, 'Behaviour ' + this.origSeq_ + ' removing reference when not referenced');
+            fail('Behaviour ' + this.origSeq_ + ' removing reference when not referenced');
+
         } else if (curRefs.count === 1) {
             delete this.refs_[manager.id_];
             removed.set(this.seq_, this);
@@ -1207,7 +1210,7 @@ export class Behaviour<T, InvType = T, OutType = T, CalcType = T> {
 
     /**
      * increases the reference count
-     * @param manager the current transction manager to add a ref for
+     * @param manager the current transaction manager to add a ref for
      * @param  count this can add more than 1 used internally
      * @return  true if count was zero
      *
@@ -1436,7 +1439,7 @@ export class Behaviour<T, InvType = T, OutType = T, CalcType = T> {
                 //                throw new recoil.exception.LoopDetected();
                 //            }
 
-                //            let newPath = goog.object.clone(cur.path);
+                //            let newPath = [...cur.path];
                 //          newPath[provObj.seqStr_] = provObj;
                 toDo.push({
                     b: provObj
@@ -1457,7 +1460,7 @@ export class Behaviour<T, InvType = T, OutType = T, CalcType = T> {
 		// other behaviours may not get the events so we have to probably queue them unless
 		// we consider an event as always a seqenence of events, then the lift just has to deal
 		// with them this may allow more power to the function, alternatively events could just have
-		// a sequence associated with them you only get one at a time, but this could be delt with
+		// a sequence associated with them you only get one at a time, but this could be dealt with
 		// outside the engine xxx
 		providers.forEach(function (b) {
 			params.push(b.metaGet());
@@ -1466,10 +1469,10 @@ export class Behaviour<T, InvType = T, OutType = T, CalcType = T> {
 		let newVal;
 
 		if (behaviour.dirtyDown_) {
-			// do nothing here calulationg here is pointless since we need to recalc anyway
+			// do nothing here. Calculating here is pointless since we need to recalc anyway
 			// but ensure we calculate it next phase,
 
-			// we have to temporaryily set value back
+			// we have to temporarily set value back
 			newVal = behaviour.val_;
 			nextItr.push({behaviour: behaviour, force: true});
 
@@ -1566,7 +1569,7 @@ class TransactionManager {
     public level_: number;
     public watching_: number;
     public watchers_: ((v: boolean) => void) [];
-    public dependancyMap_: BehaviourIdMap<BehaviourList>;
+    public dependencyMap_: BehaviourIdMap<BehaviourList>;
     private readonly curIndexPrefix_: bigint[][];
     private curIndexLock_: number;
     public todoRefs_: BehaviourIdMap<TodoInfo> | undefined;
@@ -1584,7 +1587,7 @@ class TransactionManager {
         this.watchers_ = [];
         this.pending_ = [new UniquePriorityQueue(Direction.UP.heapComparator()),
             new UniquePriorityQueue(Direction.DOWN.heapComparator())];
-        this.dependancyMap_ = new BehaviourIdMap();
+        this.dependencyMap_ = new BehaviourIdMap();
         this.curIndex_ = new Sequence();
         this.curIndexPrefix_ = [[]];
         this.curIndexLock_ = 0;
@@ -1726,7 +1729,7 @@ class TransactionManager {
 
     /**
      * returns true if we should continue
-     * finishes of the transaction if it at level 1, it performas behaviour tree traversal
+     * finishes of the transaction if it at level 1, it performs behaviour tree traversal
      */
     private transDone_(): boolean {
         let seen = true;
@@ -1847,9 +1850,9 @@ class TransactionManager {
                 const ccur = cur;
                 let accessFunc = () => {
                     if (dir === Direction.UP) {
-                        deps = me.nestIds(ccur, () => dir.calculate(ccur, ccur.providers_, me.dependancyMap_.get(ccur.seq_), nextItr));
+                        deps = me.nestIds(ccur, () => dir.calculate(ccur, ccur.providers_, me.dependencyMap_.get(ccur.seq_), nextItr));
                     } else {
-                        deps = me.lockIds_(() => dir.calculate(ccur, ccur.providers_, me.dependancyMap_.get(ccur.seq_), nextItr));
+                        deps = me.lockIds_(() => dir.calculate(ccur, ccur.providers_, me.dependencyMap_.get(ccur.seq_), nextItr));
 
                     }
                 };
@@ -1935,17 +1938,18 @@ class TransactionManager {
     }
 
     /**
+
      * helper function to add the inverse mapping provider to list of dependants
      */
-    public addProvidersToDependancyMap_(
+    public addProvidersToDependencyMap(
         b: Behaviour<any>,
         opt_provider: Behaviour<any> | undefined = undefined) {
         let me = this;
         let doAdd = (prov: Behaviour<any>) => {
-            let deps = me.dependancyMap_.get(prov.seq_);
+            let deps = me.dependencyMap_.get(prov.seq_);
             if (deps === undefined) {
                 deps = [b];
-                me.dependancyMap_.set(prov.seq_, deps);
+                me.dependencyMap_.set(prov.seq_, deps);
             } else {
                 if (deps.indexOf(b) === -1) {
                     deps.push(b);
@@ -1963,9 +1967,9 @@ class TransactionManager {
     /**
      * helper function to remove the inverse mapping provider to list of dependants
      */
-    removeProvidersFromDependancyMap_(b: Behaviour<any>, opt_provider: Behaviour<any> | null = null) {
+    removeProvidersFromDependencyMap(b: Behaviour<any>, opt_provider: Behaviour<any> | null = null) {
         const doRemove = (prov: Behaviour<any>) => {
-            let deps = this.dependancyMap_.get(prov.seq_);
+            let deps = this.dependencyMap_.get(prov.seq_);
             if (deps !== undefined) {
                 // TODO what about the same provider twice? i think it ok
                 // because we always use visited so we only ever count
@@ -1977,7 +1981,7 @@ class TransactionManager {
                     }
                 }
                 if (deps.length === 0) {
-                    this.dependancyMap_.delete(prov.seq_);
+                    this.dependencyMap_.delete(prov.seq_);
                 }
             }
         };
@@ -1990,7 +1994,7 @@ class TransactionManager {
     }
 
     /**
-     * mark the behaviour that it is being used it will now recieve update notifications
+     * mark the behaviour that it is being used it will now receive update notifications
      *
      */
     attach(...behaviours: BehaviourList) {
@@ -2018,7 +2022,6 @@ class TransactionManager {
      * update the dependence of the behaviour
      */
     public updateProviders_(dependant: Behaviour<any>, ...var_providers: Behaviour<any>[]) {
-        let count = dependant.getRefs(this);
         let oldProviders = [...dependant.providers_];
         dependant.providers_ = [...var_providers];
         dependant.providers_.forEach(function (v) {
@@ -2026,9 +2029,6 @@ class TransactionManager {
                 throw new Error('provider not a behaviour in switch for ' + dependant.origSeq_);
             }
         });
-        let b: Behaviour<any>;
-
-        let me = this;
         let oldProvMap = new BehaviourIdMap<Behaviour<any>>();
         let newProvMap = new BehaviourIdMap<Behaviour<any>>();
 
@@ -2060,7 +2060,7 @@ class TransactionManager {
         for (let [idx, rem] of removed) {
             let add = added.get(idx);
             if (!added.has(idx)) {
-                me.removePending_(rem);
+                this.removePending_(rem);
             }
         }
 
@@ -2095,7 +2095,7 @@ class TransactionManager {
 
     /**
      * make sure that all providers and providers of those providers have a lower
-     * sequence number than b, this will also re-queue and update the dependancy map
+     * sequence number than b, this will also re-queue and update the dependency map
      * of all providers that have changed
      *
      **/
@@ -2137,11 +2137,11 @@ class TransactionManager {
         // change the provider
         provider.seq_ = newSeq;
 
-        // update the dependancy map
-        let oldEntry = this.dependancyMap_.get(oldSeq);
+        // update the dependency map
+        let oldEntry = this.dependencyMap_.get(oldSeq);
         if (oldEntry) {
-            this.dependancyMap_.delete(oldSeq);
-            this.dependancyMap_.set(provider.seq_, oldEntry);
+            this.dependencyMap_.delete(oldSeq);
+            this.dependencyMap_.set(provider.seq_, oldEntry);
         }
 
         // put pending changes back with new sequence number

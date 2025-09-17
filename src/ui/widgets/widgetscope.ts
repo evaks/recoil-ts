@@ -1,12 +1,7 @@
 import {Frp} from "../../frp/frp";
-import {getFrp} from "../../frp/util";
+
 import {DomObserver} from "../domobserver";
 
-/**
- * @param {!recoil.frp.Frp=} opt_frp
- * @param {!recoil.frp.DomObserver=} opt_observer
- * @constructor
- */
 export class WidgetScope {
     private frp: Frp;
     private observer: DomObserver;

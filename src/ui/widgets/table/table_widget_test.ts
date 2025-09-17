@@ -1,29 +1,12 @@
-goog.provide('recoil.ui.widgets.table.TableWidgetTest');
 
-goog.require('goog.testing.jsunit');
-goog.require('recoil.ui.widgets.table.TableWidget');
-goog.require('recoil.util');
-goog.require('recoil.frp.Frp');
-goog.require('recoil.ui.widgets.table.TableWidget');
-goog.require('recoil.ui.widgets.TableMetaData');
-goog.require('recoil.ui.widgets.ButtonWidget');
-goog.require('recoil.ui.BoolWithExplanation');
-goog.require('recoil.ui.WidgetScope');
-goog.require('recoil.ui.widgets.table.StringColumn');
-goog.require('recoil.ui.widgets.table.NumberColumn');
-goog.require('recoil.ui.widgets.table.BooleanColumn');
-goog.require('recoil.ui.widgets.CheckboxWidget');
-goog.require('recoil.ui.widgets.table.SelectColumn');
-goog.require('goog.testing.AsyncTestCase');
-
-var typeFactories = {"int": function(meta) {
-    return new recoil.ui.widgets.table.NumberColumn(meta);
+const typeFactories = {"int": function(meta) {
+    return new NumberColumn(meta);
 }, "string": function (meta) {
-    return new recoil.ui.widgets.table.StringColumn(meta);
+    return new StringColumn(meta);
 }, "boolean": function (meta) {
-    return new recoil.ui.widgets.table.BooleanColumn(meta);
+    return new BooleanColumn(meta);
 }, "select": function (meta) {
-    return new recoil.ui.widgets.table.SelectColumn(meta);
+    return new SelectColumn(meta);
 }};
 
 var asyncTestCase = goog.testing.AsyncTestCase.createAndInstall();

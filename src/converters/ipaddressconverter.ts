@@ -1,74 +1,47 @@
-goog.provide('recoil.converters.IPAddressConverter');
-
-goog.require('recoil.converters.IPv4AddressConverter');
-goog.require('recoil.converters.IPv6AddressConverter');
-goog.require('recoil.converters.TypeConverter');
-goog.require('recoil.types');
-goog.require('recoil.types.IPAddress');
-goog.require('recoil.types.IPAddressType');
-goog.require('recoil.ui.message.Message');
+import {IPv6AddressConverter} from "./ipv6addressconverter";
+import {IPAddress, IPAddressType} from "../types/types";
+import {IPv4AddressConverter} from "./ipv4addressconverter";
+import {TypeConverter, UnconvertType} from "./typeconverter";
 
 
-/**
- *
- * @constructor
- * @implements {recoil.converters.TypeConverter<recoil.types.IPAddress, string>}
- */
-recoil.converters.IPAddressConverter = function() {
-
-};
-/**
- *
- * @param {!string} c
- * @return {boolean}
- */
-recoil.converters.IPAddressConverter.charValidator = recoil.converters.IPv6AddressConverter.charValidator;
-
-/**
- * @param {recoil.types.IPAddress} val
- * @return {!string}
- */
-recoil.converters.IPAddressConverter.prototype.convert = function(val) {
-
-    var ret;
-    if (val.type === recoil.types.IPAddressType.ipv4) {
-        ret = new recoil.converters.IPv4AddressConverter();
-        return ret.convert(val.value);
+class IPAddressConverter implements TypeConverter<IPAddress,string> {
+    static charValidator = IPv6AddressConverter.charValidator;
 
 
-    } else {
-        ret = new recoil.converters.IPv6AddressConverter(true, false, false);
-        return ret.convert(val.value);
+    convert(val: IPAddress): string {
+
+        if (val.type === IPAddressType.ipv4) {
+            return new IPv4AddressConverter().convert(val.value);
+
+        } else {
+            return new IPv6AddressConverter(true, false, false).convert(val.value);
+        }
     }
-};
 
+    unconvert(val: string): UnconvertType<IPAddress> {
 
-/**
- * @param {string} val
- * @return {!{error : recoil.ui.message.Message, value : recoil.types.IPAddress?}}
- */
-recoil.converters.IPAddressConverter.prototype.unconvert = function(val) {
+        if (val.indexOf(':') !== -1) {
+            let converter = new IPv6AddressConverter(true, false, false);
 
-    var converter;
-    var res;
-    if (val.indexOf(':') !== -1) {
-        converter = new recoil.converters.IPv6AddressConverter(true, false, false);
+            let res = converter.unconvert(val);
+            if (res.error) {
+                return {error: res.error};
+            }
+            return  {
+                value: {type: IPAddressType.ipv6, value: res.value},
+            }
+        } else {
+            let converter = new IPv4AddressConverter();
 
-        res = converter.unconvert(val);
+            let res = converter.unconvert(val);
 
-        return res.error ? {error: res.error, value: null} : {
-            error: null, value: {type: recoil.types.IPAddressType.ipv6, value: /** @type {!recoil.types.IPv6Address}*/ (res.value)}};
+            return res.error ? {error: res.error} : {
+                value: {type: IPAddressType.ipv4, value: res.value}
+            };
 
-    } else {
-        converter = new recoil.converters.IPv4AddressConverter();
-
-        res = converter.unconvert(val);
-
-        return res.error ? {error: res.error, value: null} : { error: null,
-                value: {type: recoil.types.IPAddressType.ipv4, value: /** @type {!recoil.types.IPv4Address}*/ (res.value)}};
-
+        }
     }
-};
+}
 
 
 

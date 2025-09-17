@@ -1,5 +1,5 @@
 import {IPv4Address} from "../types/types";
-import {TypeConverter, UnconvertType} from "./typeconverter";
+import {SupportedUnconvertType, TypeConverter, UnconvertType} from "./typeconverter";
 import {Messages} from "../ui/messages";
 
 export class IPv4AddressConverter implements TypeConverter<IPv4Address, string> {
@@ -10,7 +10,7 @@ export class IPv4AddressConverter implements TypeConverter<IPv4Address, string> 
         return val.join(".");
     }
 
-    unconvert(val: string): UnconvertType<IPv4Address> {
+    unconvert(val: string): SupportedUnconvertType<IPv4Address> {
         let res: number[] = [];
         let parts: string[] = val.split('.');
         let num = 0;

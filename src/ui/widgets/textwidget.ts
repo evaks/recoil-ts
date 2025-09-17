@@ -1,12 +1,3 @@
-goog.provide('recoil.ui.widgets.TextWidget');
-
-goog.require('goog.events');
-goog.require('goog.events.InputHandler');
-goog.require('goog.ui.Component');
-goog.require('goog.ui.Textarea');
-goog.require('recoil.frp.Util');
-goog.require('recoil.ui.Widget');
-
 /**
  *
  * @param {!recoil.ui.WidgetScope} scope

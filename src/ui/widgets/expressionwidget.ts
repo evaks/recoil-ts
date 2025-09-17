@@ -1,25 +1,12 @@
-goog.provide('recoil.ui.columns.Expr');
-goog.provide('recoil.ui.widgets.ExprWidget');
-
-goog.require('goog.dom');
-goog.require('goog.dom.classlist');
-goog.require('goog.events');
-goog.require('goog.events.InputHandler');
-goog.require('goog.events.KeyCodes');
-goog.require('goog.ui.Component');
-goog.require('recoil.converters.DefaultStringConverter');
-goog.require('recoil.frp.Chooser');
-goog.require('recoil.frp.Util');
-goog.require('recoil.frp.struct');
-goog.require('recoil.ui.BoolWithExplanation');
-goog.require('recoil.ui.ComponentWidgetHelper');
-goog.require('recoil.ui.TooltipHelper');
-goog.require('recoil.ui.Widget');
-goog.require('recoil.ui.util');
-goog.require('recoil.ui.widgets.InputWidget');
-goog.require('recoil.ui.widgets.LabelWidget');
-goog.require('recoil.util.ExpParser');
-
+import {Widget} from "./widget.ts";
+import {WidgetScope} from "./widgetscope.ts";
+import {InputWidget} from "./input.ts";
+import {StandardOptions} from "../frp/util.ts";
+import {StringConverter} from "../../converters/stringconverter.ts";
+import {makeStructColumn} from "./table/column.ts";
+import { UnconvertType } from "../../converters/typeconverter.ts";
+import {Messages} from "../messages.ts";
+import {extend} from "../../frp/struct.ts";
 
 /**
  *
@@ -27,103 +14,95 @@ goog.require('recoil.util.ExpParser');
  * @constructor
  * @implements {recoil.ui.Widget}
  */
-recoil.ui.widgets.ExprWidget = function(scope) {
-    this.scope_ = scope;
-    var frp = scope.getFrp();
-    this.input_ = new recoil.ui.widgets.InputWidget(scope);
-    this.erroredB_ = frp.createB(false);
+export class ExprWidget extends Widget {
+    private input_:InputWidget;
 
-    this.containerDiv_ = goog.dom.createDom('div');
+    constructor(scope: WidgetScope) {
+        let input = new InputWidget(scope);
+        super(scope, input.getElement())
+        this.input_ = input;
+        let frp = scope.getFrp();
+        this.erroredB_ = frp.createB(false);
 
-};
+        this.containerDiv_ = goog.dom.createDom('div');
 
-/**
- * all widgets should not allow themselves to be flatterned
- *
- */
-recoil.ui.widgets.ExprWidget.prototype.flatten = recoil.frp.struct.NO_FLATTEN;
 
-/**
- *
- * @return {!goog.ui.Component}
- */
-recoil.ui.widgets.ExprWidget.prototype.getComponent = function() {
-    return this.input_.getComponent();
-};
-
-/**
- * attachable behaviours for widget
- */
-recoil.ui.widgets.ExprWidget.options = recoil.ui.util.StandardOptions('value', {
-    decimalPlaces: null
-});
-
-/**
- * @constructor
- * @param {number=} decimalPlaces
- * @implements {recoil.converters.StringConverter<string>}
- */
-recoil.ui.widgets.ExprConverter = function(decimalPlaces) {
-    this.decimalPlaces_ = decimalPlaces;
-};
-
-/**
- * @param {string} val
- * @return {string}
- */
-recoil.ui.widgets.ExprConverter.prototype.convert = function(val) {
-    if (val == undefined) {
-        return '';
-    }
-    var res = recoil.util.ExpParser.instance.eval(val);
-    if (res == undefined) {
-        return val;
     }
 
-    return this.decimalPlaces_ == null ? res + '' : res.toFixed(this.decimalPlaces_) + '';
-};
 
-/**
- * @param {string} val
- * @return {{error : recoil.ui.message.Message, value : string, supported: (undefined|boolean), settable: (undefined|boolean)}}
- */
-recoil.ui.widgets.ExprConverter.prototype.unconvert = function(val) {
-    var err = null;
-    var res = recoil.util.ExpParser.instance.eval(val);
-    if (res == undefined || isNaN(res)) {
-        err = recoil.ui.messages.NOT_APPLICABLE.toString();
+    /**
+     * attachable behaviours for widget
+     */
+    static options = StandardOptions('value', {
+        decimalPlaces: null
+    });
+
+    /**
+     *
+     * @param {!Object| !recoil.frp.Behaviour<Object>} options
+     */
+    attachStruct(options) {
+        let frp = this.scope_.getFrp();
+
+        let bound = ExprWidget.options.bind(frp, options);
+
+        let expConverterB = frp.liftB(function (dp) {
+            return new ExprConverter(dp);
+        }, bound.decimalPlaces());
+
+        let defConverter = new ExprFocusStringConverter();
+
+        let modOptions = extend(
+            frp, options,
+            {
+                converter: Chooser.if(
+                    this.input_.getFocus(), defConverter, expConverterB)
+            });
+
+        this.input_.attachStruct(modOptions);
+    }
+}
+
+export class ExprConverter implements StringConverter<string> {
+    private decimalPlaces_: number | undefined;
+
+    constructor(decimalPlaces?: number) {
+        this.decimalPlaces_ = decimalPlaces;
     }
 
-    return {error: null, supported: false, value: val};
-};
+    /**
+     * @param {string} val
+     * @return {string}
+     */
+    convert(val: string | undefined) {
+        if (val == undefined) {
+            return '';
+        }
+        let res = ExpParser.instance.eval(val);
+        if (res == undefined) {
+            return val;
+        }
+
+        return this.decimalPlaces_ == null ? res + '' : res.toFixed(this.decimalPlaces_) + '';
+    }
 
 
-/**
- *
- * @param {!Object| !recoil.frp.Behaviour<Object>} options
- */
-recoil.ui.widgets.ExprWidget.prototype.attachStruct = function(options) {
-    var frp = this.scope_.getFrp();
-    var util = new recoil.frp.Util(frp);
-    var me = this;
-    var optionsB = recoil.frp.struct.flatten(frp, options);
+    /**
+     * @param {string} val
+     * @return {{error : recoil.ui.message.Message, value : string, supported: (undefined|boolean), settable: (undefined|boolean)}}
+     */
+    unconvert(val: string | undefined) {
+        let err = null;
+        let res = recoil.util.ExpParser.instance.eval(val);
+        if (res == undefined || isNaN(res)) {
+            err = recoil.ui.messages.NOT_APPLICABLE.toString();
+        }
 
-    var bound = recoil.ui.widgets.ExprWidget.options.bind(frp, options);
+        return {error: null, supported: false, value: val};
+    }
 
-    var expConverterB = frp.liftB(function(dp) {
-         return new recoil.ui.widgets.ExprConverter(dp);
-    }, bound.decimalPlaces());
 
-    var defConverter = new recoil.ui.widgets.ExprFocusStringConverter();
-
-    var modOptions = recoil.frp.struct.extend(
-        frp, options,
-        {
-            converter: recoil.frp.Chooser.if(
-                this.input_.getFocus(), defConverter, expConverterB)});
-
-    this.input_.attachStruct(modOptions);
-};
+}
 
 
 /**
@@ -131,31 +110,21 @@ recoil.ui.widgets.ExprWidget.prototype.attachStruct = function(options) {
  * @implements {recoil.converters.StringConverter<string>}
  */
 
-recoil.ui.widgets.ExprFocusStringConverter = function() {
+export class ExprFocusStringConverter implements StringConverter<string> {
+    convert(val: string): string {
+        return val != undefined ? val : '';   }
+    unconvert(val: string): UnconvertType<string> {
+        let res = ExpParser.instance.eval(val);
+        let err = null;
 
-};
-/**
- * @param {string} val
- * @return {string}
- */
-recoil.ui.widgets.ExprFocusStringConverter.prototype.convert = function(val) {
-    return val != undefined ? val : '';
-};
+        if (res == null) {
+            return {error:Messages.INVALID_EXPRESSION, value:val, settable:true};
 
-/**
- * @param {string} val
- * @return {{error : recoil.ui.message.Message, value : string, supported: (undefined|boolean), settable: (undefined|boolean)}}
- */
-recoil.ui.widgets.ExprFocusStringConverter.prototype.unconvert = function(val) {
-
-    var res = recoil.util.ExpParser.instance.eval(val);
-    var err = null;
-
-    if (res == null) {
-        err = recoil.ui.messages.INVALID_EXPRESSION;
+        }
+        return {value: val};
     }
-    return {error: err, value: val, settable: true};
-};
+
+}
 
 /**
  * @implements {recoil.ui.widgets.table.Column}
@@ -165,4 +134,4 @@ recoil.ui.widgets.ExprFocusStringConverter.prototype.unconvert = function(val) {
  * @param {!recoil.ui.message.Message|string} name
  * @param {Object=} opt_meta
  */
-recoil.ui.columns.Expr = recoil.ui.widgets.table.makeStructColumn(recoil.ui.widgets.ExprWidget);
+export const ExprColumns = makeStructColumn(ExprWidget);

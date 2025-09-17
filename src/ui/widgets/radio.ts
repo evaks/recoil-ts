@@ -3,108 +3,93 @@
  * the inputs are value and a selected value
  *
  */
-goog.provide('recoil.ui.widgets.RadioWidget');
 
-goog.require('goog.dom');
-goog.require('goog.ui.Container');
-goog.require('recoil.ui.ComponentWidgetHelper');
-goog.require('recoil.ui.Widget');
-goog.require('recoil.ui.WidgetScope');
-goog.require('recoil.ui.message.Message');
-goog.require('recoil.ui.messages');
+import {Widget} from "./widget.ts";
+import {
+    getGroup,
+    Options,
+    StandardOptions,
+    getStandardOptionsGroup,
+    StandardOptionsBoundType,
+    StandardOptionsType
+} from "../frp/util.ts";
+import {BoolWithExplanation} from "../booleanwithexplain.ts";
+import {WidgetHelper} from "../widgethelper.ts";
+import {EnabledTooltipHelper} from "../tooltiphelper.ts";
+import {createDom} from "../dom/dom.ts";
+import {TagName} from "../dom/tags.ts";
+import {WidgetScope} from "./widgetscope.ts";
+import {AttachType} from "../../frp/struct.ts";
+import {Behaviour} from "../../frp/frp.ts";
+import {EventHandler, EventHelper} from "../eventhelper.ts";
+import {EventType} from "../dom/eventtype.ts";
+import {isEqual} from "../../util/object.ts";
 
 /**
  *
  * @template T
- * @param {!recoil.ui.WidgetScope} scope
- * @implements {recoil.ui.Widget}
+ * @param {!WidgetScope} scope
+ * @implements {Widget}
  * @constructor
  */
-recoil.ui.widgets.RadioWidget = function(scope) {
-    this.scope_ = scope;
-    this.radio_ = null;
+export class RadioWidget<T> extends Widget {
+    private radio_:HTMLInputElement;
+    private helper_: WidgetHelper;
+    private tooltip_: EnabledTooltipHelper
+    private valueB_?:Behaviour<T>;
+    private configB_?:Behaviour<{
+        optionValue: T,
+    } & StandardOptionsBoundType>;
 
-    var toControl = recoil.ui.ComponentWidgetHelper.elementToControl;
-    this.container_ = new goog.ui.Component();
-    this.radio_ = goog.dom.createDom('input', {type: 'radio', autocomplete: 'off'});
-    this.container_.addChild(toControl(this.radio_), true);
-    this.helper_ = new recoil.ui.ComponentWidgetHelper(scope, this.container_, this, this.updateState_);
-    this.tooltip_ = new recoil.ui.TooltipHelper(scope, this.container_);
-};
-
-
-/**
- * @type {recoil.frp.Util.OptionsType}
- */
-recoil.ui.widgets.RadioWidget.options =
-    recoil.frp.Util.Options('value', 'selectValue',
-                            {
-                                enabled: recoil.ui.BoolWithExplanation.TRUE
-                            });
-
-/**
- * @param {!recoil.frp.Behaviour<T>|T} value the widget that will be displayed in the popup
- * @param {!recoil.frp.Behaviour<T>|T} selectValue the widget that will be displayed normally (no popup required
- * @suppress {missingProperties}
- */
-
-recoil.ui.widgets.RadioWidget.prototype.attach = function(value, selectValue)  {
-    recoil.ui.widgets.RadioWidget.options.value(value).selectValue(selectValue).attach(this);
-};
-
-
-/**
- * see recoil.ui.widgets.PopupWidget.options fro valid options
- * @param {!Object|!recoil.frp.Behaviour<Object>} options
- * @suppress {missingProperties}
- */
-recoil.ui.widgets.RadioWidget.prototype.attachStruct = function(options) {
-    var frp = this.helper_.getFrp();
-    var bound = recoil.ui.widgets.RadioWidget.options.bind(frp, options);
-
-    this.valueB_ = bound.value();
-    this.selectValueB_ = bound.selectValue();
-    this.enabledB_ = bound.enabled();
-
-    this.helper_.attach(this.valueB_, this.selectValueB_, this.enabledB_);
-    var me = this;
-    this.radio_.onchange = function() {
-        frp.accessTrans(function() {
-            if (me.helper_.isGood()) {
-                me.valueB_.set(me.selectValueB_.get());
-            }
-        }, me.valueB_, me.selectValueB_, me.enabledB_);
-    };
-    this.tooltip_.attach(this.enabledB_, this.helper_);
-};
-
-/**
- *
- * @param {recoil.ui.WidgetHelper} helper
- * @private
- */
-recoil.ui.widgets.RadioWidget.prototype.updateState_ = function(helper) {
-    this.radio_.disabled = !helper.isGood() || !this.enabledB_.get().val();
-    if (helper.isGood()) {
-        var newVal = recoil.util.object.isEqual(this.valueB_.get(), this.selectValueB_.get());
-        if (this.radio_.checked != newVal) {
-            this.radio_.checked = newVal;
-        }
+    constructor(scope:WidgetScope) {
+        super(scope, createDom(TagName.DIV, {class: 'recoil-radio'}));
+        this.radio_ = createDom(TagName.INPUT, {type: 'radio', autocomplete: 'off'});
+        this.getElement().appendChild(this.radio_);
+        this.helper_ = new WidgetHelper(scope, this.getElement(), this, this.updateState_);
+        this.tooltip_ = new EnabledTooltipHelper(scope, this.getElement(), this.radio_);
     }
 
-};
 
-/**
- * @return {!goog.ui.Component}
- */
-recoil.ui.widgets.RadioWidget.prototype.getComponent = function() {
-    return this.container_;
-};
+    /**
+     * @type {OptionsType}
+     */
+    static options =
+        StandardOptions(
+            'value', // the value that is currently selected
+            'optionValue', // the value that this radio option represents
+        );
 
-/**
- * all widgets should not allow themselves to be flatterned
- *
- * @type {!Object}
- */
+    /**
+     * see options from valid options
+     */
+    attachStruct(options:AttachType<
+        {
+            value: T;
+            optionValue:T;
+        } & StandardOptionsType>) {
+        let frp = this.helper_.getFrp();
+        let bound = RadioWidget.options.bind(frp, options);
 
-recoil.ui.widgets.RadioWidget.prototype.flatten = recoil.frp.struct.NO_FLATTEN;
+        this.valueB_ = bound.value();
+        this.configB_ = getStandardOptionsGroup(bound, [bound.optionValue]);
+
+        this.helper_.attach(this.valueB_, this.configB_);
+        EventHelper.listen(this.radio_, EventType.CHANGE, frp.accessTransFunc(
+            () => {
+                if (this.helper_.isGood()) {
+                    this.valueB_?.set(this.configB_!.get().optionValue);
+                }
+            }, this.valueB_, this.configB_));
+        this.tooltip_.attach(this.configB_, this.helper_);
+    };
+
+    private updateState_(helper:WidgetHelper) {
+        if (helper.isGood()) {
+            let newVal = isEqual(this.valueB_!.get(), this.configB_!.get().enabled);
+            if (this.radio_.checked != newVal) {
+                this.radio_.checked = newVal;
+            }
+        }
+
+    }
+}

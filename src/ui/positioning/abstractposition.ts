@@ -33,5 +33,5 @@ export abstract class AbstractPosition {
      * @param opt_preferredSize PreferredSize of the movableElement.
      */
     abstract reposition(
-        movableElement: Element, corner: Corner, opt_margin?: Box, opt_preferredSize?: Size) :void;
+        movableElement: Element, corner: Corner, opt_margin?: Box|null, opt_preferredSize?: Size) :void;
 }

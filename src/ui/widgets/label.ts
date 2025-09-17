@@ -2,130 +2,116 @@
  * a simple widget to provide just text no formatting
  *
  */
-import {Widget} from "./widget";
-import {Message} from "../message";
-import {WidgetScope} from "./widgetscope";
-import {Behaviour} from "../../frp/frp";
+import {Widget} from "./widget.ts";
+import {Message} from "../message.ts";
+import {WidgetScope} from "./widgetscope.ts";
+import {Behaviour, ErrorType} from "../../frp/frp.ts";
 import {BoolWithExplanation} from "../booleanwithexplain";
-import {WidgetHelper} from "../widgethelper";
-import {createDom, createTextNode, isCss1CompatMode, removeChildren} from "../dom/dom";
-import {Options} from "../frp/util";
-import {TagName} from "../dom/tags";
-import {BehaviourOrType, StructBehaviourOrType} from "../../frp/struct";
-import {Tooltip} from "../tooltip";
+import {WidgetHelper} from "../widgethelper.ts";
+import {createDom, createTextNode, removeChildren} from "../dom/dom.ts";
+import {Options, StandardOptionsType} from "../frp/util.ts";
+import {TagName} from "../dom/tags.ts";
+import {AttachType} from "../../frp/struct.ts";
+import {Tooltip} from "../tooltip.ts";
+import {Messages} from "../messages.ts";
+import {EventHandler} from "../eventhelper.ts";
+import {EventType} from "../dom/eventtype.ts";
 
-export type ValueType = string|Message|Node;
-export type FormatterFn = (value: ValueType)=>string|Node;
+export type ValueType = string | Message | Node;
+export type FormatterFn<Type> = (value: Type) => string | Node;
 
-export class Label extends Widget {
+/**
+ * a class that lets you create a label without the overhead of behaviours
+ *
+ */
+export class LabelHelper<T = ValueType> {
+    private readonly label_: HTMLElement;
+    private readonly errorHandlers_ = new EventHandler();
+    private tooltip_: Tooltip | null;
+    private tooltipVal_: ValueType | null;
     private curClasses_: string[] = [];
-    private scope_:WidgetScope;
-    private label_: HTMLElement;
-    private helper_: WidgetHelper;
-    private valueB_?: Behaviour<ValueType>;
-    private enabledB_?: Behaviour<BoolWithExplanation>;
-    private classesB_?:Behaviour<string[]>;
-    private formatterB_?: Behaviour<FormatterFn>;
-    private tooltip_: Tooltip|null;
-    private tooltipVal_: ValueType|null;
 
-    constructor(scope: WidgetScope) {
-        super();
-        this.scope_ = scope;
+    constructor(label: HTMLElement, helper:WidgetHelper) {
+        this.label_ = label;
         this.tooltip_ = null;
         this.tooltipVal_ = null;
-
-        this.label_ = createDom(TagName.DIV) as HTMLElement;
-        this.helper_ = new WidgetHelper(scope, this.label_, this, this.updateState_,  ()=> {
-            this.resetTooltip_(null);
-        });
-
-        this.curClasses_ = [];
+        helper.addDetachCallback({
+            detach: () => {this.resetTooltip_(null);},
+            attach: () => {}})
     }
 
+    updateGood(val: T, formater: FormatterFn<T>, classes:string[], tooltip: {
+        enabled: BoolWithExplanation,
+        tooltip?: Message | string | undefined | null | Node
+    }):void {
+        this.errorHandlers_.unlisten();
+        removeChildren(this.label_);
+        this.curClasses_ = WidgetHelper.updateClassesNoBehaviour(classes, this.curClasses_, this.label_);
 
-    static defaultFormatter_(value: ValueType):string|Node {
-        if (typeof value === "string") {
-            return value;
-        } else if (value instanceof Message) {
-            return value.toString();
-        } else if (value instanceof Node) {
-            return value;
-        } else {
-            return 'ERROR: not string but ' + typeof (value) + ': ' + value;
+        let content = formater(val);
+        let fullTooltip: Node | null = null;
+        if (tooltip.tooltip instanceof Node) {
+            if (tooltip.enabled && tooltip.enabled.reason() && !tooltip.enabled.reason()?.isEmpty()) {
+                fullTooltip = createDom(TagName.SPAN, {}, tooltip.tooltip, tooltip.enabled.reason()!.toString());
+            }
+            else {
+                fullTooltip = tooltip.tooltip;
+            }
+        }
+        else if (tooltip.tooltip && tooltip.tooltip.toString().trim().length > 0) {
+            let part1 = Message.toMessage(tooltip.tooltip);
+            if (tooltip.enabled) {
+                let reason = tooltip.enabled.reason();
+                if (reason !== null && reason.toString().trim().length > 0) {
+                    fullTooltip = createDom(TagName.SPAN, {}, Messages.join([part1, reason], Messages.COMMA));
+                }
+                else {
+                    fullTooltip = createDom(TagName.SPAN, {}, part1.toString());
+                }
+            }
+            else {
+                fullTooltip = createDom(TagName.SPAN, {}, part1.toString());
+            }
+        }
+        else if (tooltip.enabled) {
+            let reason = tooltip.enabled.reason();
+            if (reason && !reason.isEmpty()) {
+                fullTooltip = createDom(TagName.SPAN, {}, tooltip.enabled.reason());
+            }
         }
 
-    }
-
-    /**
-     * list of functions available when creating a selectorWidget
-     */
-
-    static readonly options = Options('value',
-        {
-            'enabled': BoolWithExplanation.TRUE,
-            'formatter': Label.defaultFormatter_,
-            'classes': []
-        });
-
-    private updateState_(helper: WidgetHelper) {
-        this.curClasses_ = WidgetHelper.updateClasses(this.label_, this.classesB_, this.curClasses_);
-        removeChildren(this.label_);
-        let tooltip = null;
-
-
-        if (helper.isGood()) {
-            let val = this.valueB_?.get() as ValueType;
-            let content = this.formatterB_.get()(val);
-            try {
-                tooltip = this.enabledB_?.get().reason();
-                if (tooltip) {
-                    tooltip = tooltip.toString();
-                }
-            } catch (e) {
-            }
-
-            if (content instanceof Node) {
-                this.label_.appendChild(content);
-            } else if (typeof content === "string") {
-                this.label_.appendChild(createTextNode(content));
-            } else {
-                this.label_.appendChild(createTextNode(content + ''));
-            }
-
-
+        if (content instanceof Node) {
+            this.label_.appendChild(content);
+        } else if (typeof content === "string") {
+            this.label_.appendChild(createTextNode(content));
         } else {
+            this.label_.appendChild(createTextNode(content + ''));
+        }
+
+        this.resetTooltip_(fullTooltip || '');
+    }
+    updateBad(errors:ErrorType[]) {
+        this.errorHandlers_.unlisten();
+        removeChildren(this.label_);
+        if (errors.length > 0) {
+            let cont = createDom(TagName.DIV, {class: 'recoil-error'});
+            for (let error of errors) {
+                let e = error instanceof Error ? error.message : error;
+                let div = createDom(TagName.DIV, {class:'recoil-error'}, e);
+                this.errorHandlers_.listen(div, EventType.CLICK, () => console.error("error", error));
+                cont.appendChild(div)
+            }
+            this.label_.appendChild(cont);
+        }
+        else {
             this.label_.appendChild(createTextNode('??'));
         }
-        this.resetTooltip_(tooltip);
+        this.resetTooltip_(null);
     }
-
-    attachStruct(value:BehaviourOrType<{
-        value: ValueType;
-        enabled: BoolWithExplanation,
-        formatter: FormatterFn;
-        classes: string[],
-    }|{
-        value: BehaviourOrType<ValueType>,
-        enabled: BehaviourOrType<BoolWithExplanation>,
-        formatter: BehaviourOrType<FormatterFn>,
-        classes: BehaviourOrType<string[]>
-    }>) {
-        let frp = this.helper_.getFrp();
-        let bound = Label.options.bind(frp, value);
-
-        this.valueB_ = bound.value();
-        this.enabledB_ = bound.enabled();r
-        this.formatterB_ = bound.formatter();
-        this.classesB_ = bound.classes();
-        this.helper_.attach(this.valueB_, this.enabledB_, this.formatterB_, this.classesB_);
-    }
-
-
     /**
      *  @param {?} tooltip
      */
-    private resetTooltip_(tooltip: ValueType| null) {
+    private resetTooltip_(tooltip: ValueType | null) {
         if (typeof (tooltip) === 'string') {
             tooltip = tooltip.trim();
             if (tooltip == '') {
@@ -147,18 +133,91 @@ export class Label extends Widget {
         }
 
     }
+
+
+    static defaultFormatter(value: ValueType): string | Node {
+        if (typeof value === "string") {
+            return value;
+        } else if (value instanceof Message) {
+            return value.toString();
+        } else if (value instanceof Node) {
+            return value;
+        } else {
+            return 'ERROR: not string but ' + typeof (value) + ': ' + value;
+        }
+
+    }
+
 }
 
+export class Label<Type> extends Widget {
+    private helper_: WidgetHelper;
+    private valueB_?: Behaviour<Type>;
+    private enabledB_?: Behaviour<BoolWithExplanation>;
+    private tooltipB_?: Behaviour<Message|Node|string>;
+    private classesB_?: Behaviour<string[]>;
+    private formatterB_?: Behaviour<FormatterFn<Type>>;
+    private labelHelper_: LabelHelper<Type>;
+
+    constructor(scope: WidgetScope) {
+        let label = createDom(TagName.DIV);
+        super(scope, label);
+        this.helper_ = new WidgetHelper(scope, this.getElement(), this, this.updateState_);
+        this.labelHelper_ = new LabelHelper(label, this.helper_);
+    }
+
+    /**
+     * list of functions available when creating a selectorWidget
+     */
+
+    static readonly options = Options('value',
+        {
+            'enabled': BoolWithExplanation.TRUE,
+            'tooltip': Messages.BLANK,
+            'formatter': LabelHelper.defaultFormatter,
+            'classes': []
+        });
+
+    private updateState_(helper: WidgetHelper) {
+        if (helper.isGood()) {
+            this.labelHelper_.updateGood(this.valueB_!.get(), this.formatterB_!.get(), this.classesB_!.get(), {enabled: this.enabledB_!.get(), tooltip: this.tooltipB_!.get()})
+        } else {
+            this.labelHelper_.updateBad(helper.errors());
+        }
+    }
+
+    attachStruct(value: AttachType<{
+        value: Type;
+        enabled?: BoolWithExplanation,
+        tooltip?:Message|string|Node,
+        formatter?: FormatterFn<Type>;
+        classes?: string[],
+    }>) {
+        let frp = this.scope_.getFrp();
+        let bound = Label.options.bind(frp, value);
+
+        this.valueB_ = bound.value();
+        this.enabledB_ = bound.enabled();
+        this.tooltipB_ = bound.tooltip();
+        this.formatterB_ = bound.formatter();
+        this.classesB_ = bound.classes();
+        this.helper_.attach(this.valueB_, this.enabledB_, this.formatterB_, this.classesB_, this.tooltipB_);
+    }
+
+
+}
 
 
 export class LabelWidgetHelper {
     private scope_: WidgetScope;
+
     constructor(scope: WidgetScope) {
         this.scope_ = scope;
     }
-    static createAndAttach(name:string|Behaviour<string>, enabled:BoolWithExplanation|Behaviour<BoolWithExplanation>) {
-        var label = new LabelWidget(this.scope_);
-        label.attach(name, enabled);
+
+    createAndAttach(name: string | Behaviour<string>, enabled: BoolWithExplanation | Behaviour<BoolWithExplanation>) {
+        let label = new Label(this.scope_);
+        label.attachStruct({value: name, enabled});
         return label;
     }
 }

@@ -1,7 +1,12 @@
-goog.provide('recoil.ui.widgets.table.BooleanColumn');
-
-goog.require('recoil.ui.widgets.CheckboxWidget');
-goog.require('recoil.ui.widgets.table.Column');
+import {extend, StructBehaviourOrType, StructType} from "../../../frp/struct";
+import {WidgetScope} from "../widgetscope";
+import {Behaviour} from "../../../frp/frp";
+import {Widget} from "../widget";
+import {Column} from "./column";
+import {ColumnKey} from "../../../structs/table/columnkey";
+import {Checkbox} from "../checkbox";
+import {TableCell} from "../../../structs/table/table";
+import {TableCellHelper} from "../../../frp/table";
 
 /**
  *
@@ -12,51 +17,49 @@ goog.require('recoil.ui.widgets.table.Column');
  * @template T
  * @constructor
  */
-recoil.ui.widgets.table.BooleanColumn = function(key, name, opt_options) {
-    this.key_ = key;
-    this.name_ = name;
-    this.options_ = opt_options || {};
-};
+export class BooleanColumn implements Column {
+    private readonly key_: ColumnKey<boolean>;
+    private readonly name_:string;
+    private readonly options_:StructBehaviourOrType;
 
-/**
- *
- * @param {recoil.ui.WidgetScope} scope
- * @param {!recoil.frp.Behaviour<recoil.structs.table.TableCell>} cellB
- * @return {recoil.ui.Widget}
- * @private
- */
-recoil.ui.widgets.table.BooleanColumn.defaultWidgetFactory_ = function(scope, cellB) {
-    var frp = scope.getFrp();
-    var widget = new recoil.ui.widgets.CheckboxWidget(scope);
-    var value = recoil.frp.table.TableCell.getValue(frp, cellB);
-    var meta = recoil.frp.table.TableCell.getMeta(frp, cellB);
+    constructor(key:ColumnKey<boolean>, name: string, opt_options: StructBehaviourOrType) {
+        this.key_ = key;
+        this.name_ = name;
+        this.options_ = opt_options || {};
+    }
 
-    widget.attachStruct(recoil.frp.struct.extend(frp, meta, {value: value}));
-    return widget;
-};
+    private static defaultWidgetFactory_(scope: WidgetScope, cellB: Behaviour<TableCell<boolean>>): Widget {
+        let frp = scope.getFrp();
+        let widget = new Checkbox(scope);
+        let value = TableCellHelper.getValue(frp, cellB);
+        let meta = TableCellHelper.getMeta(frp, cellB);
+        widget.attachStruct(extend(frp, meta, {value: value}) as Behaviour<any>);
+        return widget;
+    }
 
-/**
- * adds all the meta information that a column should need
- * this should at least include cellWidgetFactory
- * other meta data can include:
- *   headerDecorator
- *   cellDecorator
- * and anything else specific to this column such as options for a combo box
- *
- * @param {Object} curMeta
- * @return {Object}
- */
-recoil.ui.widgets.table.BooleanColumn.prototype.getMeta = function(curMeta) {
-    var meta = {name: this.name_,
-                cellWidgetFactory: recoil.ui.widgets.table.BooleanColumn.defaultWidgetFactory_};
+    /**
+     * adds all the meta information that a column should need
+     * this should at least include cellWidgetFactory
+     * other meta data can include:
+     *   headerDecorator
+     *   cellDecorator
+     * and anything else specific to this column such as options for a combo box
+     *
+     * @param curMeta
+     */
+    getMeta(curMeta: StructType): StructType {
+        return {
+            name: this.name_,
+            cellWidgetFactory: BooleanColumn.defaultWidgetFactory_,
+            ...this.options_,
+            ...curMeta
+        };
+    }
 
-    goog.object.extend(meta, this.options_, curMeta);
-    return meta;
-};
-
-/**
- * @return {recoil.structs.table.ColumnKey}
- */
-recoil.ui.widgets.table.BooleanColumn.prototype.getKey = function() {
-    return this.key_;
-};
+    /**
+     * @return
+     */
+    getKey(): ColumnKey<boolean> {
+        return this.key_;
+    }
+}

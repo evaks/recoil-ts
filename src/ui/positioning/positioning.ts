@@ -35,14 +35,14 @@ import {TagName} from "../dom/tags";
 import {Rect} from "../dom/rect";
 
 /**
- * Enum for bits in the {@see Corner) bitmap.
+ * Enum for bits in the {@see Corner} bitmap.
  */
 export enum CornerBit {
     BOTTOM = 1,
     CENTER = 2,
     RIGHT = 4,
     FLIP_RTL = 8
-};
+}
 
 
 /**
@@ -50,7 +50,7 @@ export enum CornerBit {
  *
  * The START constants map to LEFT if element directionality is left
  * to right and RIGHT if the directionality is right to left.
- * Likewise END maps to RIGHT or LEFT depending on the directionality.
+ * Likewise, END maps to RIGHT or LEFT depending on the directionality.
  *
  * @enum {number}
  */
@@ -174,13 +174,13 @@ export enum OverflowStatus {
  *     {@code movableElement}. In other words, the viewport can be thought of as
  *     describing a "position: absolute" element contained in the offsetParent.
  *     It defaults to visible area of nearest scrollable ancestor of
- *     {@code movableElement} (see {@code goog.style.getVisibleRectForElement}).
+ *     {@code movableElement} (see {@code getVisibleRectForElement}).
  * @return Status bitmap,
  *     {@see OverflowStatus}.
  */
 export function positionAtAnchor(
     anchorElement:Element, anchorElementCorner:Corner, movableElement:Element, movableElementCorner:Corner,
-    opt_offset?:Coordinate, opt_margin?:Box, opt_overflow?:number, opt_preferredSize?:Size, opt_viewport?:Box):OverflowStatus {
+    opt_offset?:Coordinate|null, opt_margin?:Box|null, opt_overflow?:number, opt_preferredSize?:Size, opt_viewport?:Box):OverflowStatus {
     
     let movableParentTopLeft =
         getOffsetParentPageOffset(movableElement);
@@ -250,8 +250,8 @@ export function positionAtAnchor(
  * y-offset relative to the page to an offset relative to the
  * offsetParent, which can then be used directly with as position
  * coordinate for {@code positionWithCoordinate}.
- * @param {!Element} movableElement The element to calculate.
- * @return {!goog.math.Coordinate} The page offset, may be (0, 0).
+ * @param movableElement The element to calculate.
+ * @return The page offset, may be (0, 0).
  */
 export function getOffsetParentPageOffset  (movableElement:Element):Coordinate {
     // Ignore offset for the BODY element unless its position is non-static.
@@ -281,11 +281,10 @@ export function getOffsetParentPageOffset  (movableElement:Element):Coordinate {
 
 
 /**
- * Returns intersection of the specified element and
- * goog.style.getVisibleRectForElement for it.
+ * Returns intersection of the specified element and getVisibleRectForElement for it.
  *
- * @param {Element} el The target element.
- * @return {!goog.math.Rect} Intersection of getVisibleRectForElement
+ * @param el The target element.
+ * @return Intersection of getVisibleRectForElement
  *     and the current bounding rectangle of the element.  If the
  *     intersection is empty, returns the bounding rectangle.
  */
@@ -322,7 +321,7 @@ function getVisiblePart_ (el:Element):Rect {
  * @return {OverflowStatus} Status bitmap.
  */
 export function positionAtCoordinate (
-    absolutePos:Coordinate, movableElement:Element, movableElementCorner:Corner, opt_margin?:Box, opt_viewport?:Box,
+    absolutePos:Coordinate, movableElement:Element, movableElementCorner:Corner, opt_margin?:Box|null, opt_viewport?:Box|null,
     opt_overflow?:number, opt_preferredSize?:Size):OverflowStatus {
     absolutePos = absolutePos.clone();
 
@@ -368,14 +367,13 @@ export function positionAtCoordinate (
  *    towards the spot it was positioned away from its center.
  * @param opt_viewport Box object describing the dimensions of
  *     the viewport. Required if opt_overflow is specified.
- * @param {?number=} opt_overflow Overflow handling mode. Defaults to IGNORE
+ * @param opt_overflow Overflow handling mode. Defaults to IGNORE
  *     if not specified, {@see Overflow}.
- * @return {{rect:!goog.math.Rect, status:OverflowStatus}}
- *     Object containing the computed position and status bitmap.
+ * @return Object containing the computed position and status bitmap.
  */
 export function getPositionAtCoordinate (
-    absolutePos:Coordinate, elementSize:Size, elementCorner:Corner, opt_margin?:Box, opt_viewport?:Box,
-    opt_overflow?:number) {
+    absolutePos:Coordinate, elementSize:Size, elementCorner:Corner, opt_margin?:Box|null, opt_viewport?:Box|null,
+    opt_overflow?:number) : {rect:Rect,status:OverflowStatus} {
     absolutePos = absolutePos.clone();
     elementSize = elementSize.clone();
     let status = OverflowStatus.NONE;
@@ -534,7 +532,7 @@ function adjustForViewport_ (pos:Coordinate, size:Size, viewport:Box, overflow:n
     }
 
     return status;
-};
+}
 
 
 /**

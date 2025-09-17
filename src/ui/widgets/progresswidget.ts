@@ -1,107 +1,82 @@
-goog.provide('recoil.ui.widgets.ProgressWidget');
 
-goog.require('goog.events');
-goog.require('goog.ui.ProgressBar');
-goog.require('recoil.frp.Util');
-goog.require('recoil.ui.Widget');
-goog.require('recoil.ui.util');
+import {WidgetScope} from "./widgetscope.ts";
+import {getGroup, StandardOptions} from "../frp/util.ts";
+import {WidgetHelper} from "../widgethelper.ts";
+import {Widget} from "./widget.ts";
+import {createDom, isElement, setTextContent} from "../dom/dom.ts";
+import classlist from "../dom/classlist.ts";
+import {Behaviour} from "../../frp/frp.ts";
+import {Message} from "../message.ts";
+import {AttachType} from "../../frp/struct.ts";
+import {BoolWithExplanation} from "../booleanwithexplain.ts";
 
-/**
- *
- * @param {!recoil.ui.WidgetScope} scope
- * @constructor
- * @implements {recoil.ui.Widget}
- */
-recoil.ui.widgets.ProgressWidget = function(scope) {
-    this.scope_ = scope;
-    this.progress_ = new goog.ui.ProgressBar();
-    this.text_ = goog.dom.createDom('div', {class: 'progress-bar-text'});
+export class ProgressWidget extends Widget {
+    private progressDiv_:HTMLDivElement;
+    private text_: HTMLDivElement;
+    private helper_:WidgetHelper;
+    private configB_?: Behaviour<{
+        text:string|Message|Element,
+        max:number,
+        value:number,
+    }>;
 
-    this.progressDiv_ = goog.dom.createDom(
-        'div', {},
-        goog.dom.createDom('div', {class: 'progress-bar-thumb'}),
-        this.text_);
-    this.containerDiv_ = goog.dom.createDom('div', {}, this.progressDiv_);
-    this.container_ = recoil.ui.ComponentWidgetHelper.elementToNoFocusControl(this.containerDiv_);
-    this.progress_.decorate(this.progressDiv_);
-    this.helper_ = new recoil.ui.ComponentWidgetHelper(scope, this.progress_, this, this.updateState_);
-};
+    constructor(scope: WidgetScope) {
 
-/**
- * @return {!goog.ui.Component}
- */
-recoil.ui.widgets.ProgressWidget.prototype.getComponent = function() {
-    return this.container_;
-};
+        super(scope,createDom('div', {}, this.progressDiv_));
 
-/**
- * @param {recoil.ui.WidgetHelper} helper
- * @private
- */
-recoil.ui.widgets.ProgressWidget.prototype.updateState_ = function(helper) {
-    if (helper.isGood()) {
-        let max = this.maxB_.get();
-        let curVal = this.valueB_.get();
-        this.progress_.setMaximum(max);
-        this.progress_.setValue(curVal);
-        let val = this.textB_.get();
+        this.progress_ = new goog.ui.ProgressBar();
+        this.text_ = createDom('div', {class: 'recoil-progress-bar-text'});
 
-        goog.dom.classlist.enable(this.progressDiv_, 'progress-bar-done', curVal >= max);
+        this.progressDiv_ = createDom(
+            'div', {},
+            createDom('div', {class: 'recoil-progress-bar-thumb'}),
+            this.text_);
+        this.progress_.decorate(this.progressDiv_);
+        this.helper_ = new WidgetHelper(scope, this.progress_, this, this.updateState_);
+    }
+    
+    private updateState_(helper:WidgetHelper) {
+        if (helper.isGood() && this.configB_) {
+            let max = this.configB_.get().max;
+            let curVal = this.configB_.get().value;
+            this.progress_.setMaximum(max);
+            this.progress_.setValue(curVal);
+            let val = this.configB_.get().text;
 
-        if (goog.dom.isElement(val)) {
-            goog.dom.setTextContent(this.text_, '' /*this.textB_.get().innerText*/);
-            this.text_.appendChild(this.textB_.get());
+            classlist.enable(this.progressDiv_, 'recoil-progress-bar-done', curVal >= max);
+
+            if (isElement(val)) {
+                setTextContent(this.text_, '' /*this.textB_.get().innerText*/);
+                this.text_.appendChild(val);
+            } else {
+                setTextContent(this.text_, String(val));
+            }
         } else {
-            goog.dom.setTextContent(this.text_, this.textB_.get());
+            classlist.enable(this.progressDiv_, 'progress-bar-done', false);
+            setTextContent(this.text_, '');
+            this.progress_.setValue(0);
+            this.progress_.setMaximum(100);
         }
     }
-    else {
-        goog.dom.classlist.enable(this.progressDiv_, 'progress-bar-done', false);
-        goog.dom.setTextContent(this.text_, '');
-        this.progress_.setValue(0);
-        this.progress_.setMaximum(100);
+
+    /**
+     * attachable behaviours for widget
+     */
+    static options = StandardOptions(
+        'max', 'value', {
+            text: ''
+        });
+
+    /**
+     *
+     * @param {!Object| !recoil.frp.Behaviour<Object>} options
+     */
+    attachStruct(options:AttachType<
+        { value:number, max: number, text?:string, enabled?: BoolWithExplanation }>) {
+        let frp = this.helper_.getFrp();
+        let bound = ProgressWidget.options.bind(frp, options);
+        this.configB_ = bound[getGroup]([bound.max, bound.value, bound.text, bound.enabled]);
+        this.helper_.attach(this.configB_);
     }
-};
+}
 
-/**
- * attachable behaviours for widget
- */
-recoil.ui.widgets.ProgressWidget.options = recoil.ui.util.StandardOptions(
-    'max', 'value', {
-        text: ''
-    });
-
-/**
- * @param {recoil.frp.Behaviour<number>|number} valueB
- * @param {recoil.frp.Behaviour<number>|number} maxB
- * @param {recoil.frp.Behaviour<string>|string|Element} textB
- * @param {recoil.frp.Behaviour<!recoil.ui.BoolWithExplanation>|!recoil.ui.BoolWithExplanation=} opt_enabledB
- */
-recoil.ui.widgets.ProgressWidget.prototype.attach = function(valueB, maxB, textB,  opt_enabledB) {
-    //this.passwordInput_.attachStruct({'name': name, 'value': value, 'enabled': enabled});
-    this.attachStruct({value: valueB, max: maxB, text: textB});
-
-};
-
-/**
- *
- * @param {!Object| !recoil.frp.Behaviour<Object>} options
- */
-recoil.ui.widgets.ProgressWidget.prototype.attachStruct = function(options) {
-    var frp = this.helper_.getFrp();
-
-    var bound = recoil.ui.widgets.ProgressWidget.options.bind(frp, options);
-    this.maxB_ = bound.max();
-    this.valueB_ = bound.value();
-    this.textB_ = bound.text().debug('text');
-    this.enabledB_ = bound.enabled();
-    this.helper_.attach(this.valueB_, this.maxB_, this.textB_, this.enabledB_);
-};
-
-/**
- * all widgets should not allow themselves to be flatterned
- *
- * @type {!Object}
- */
-
-recoil.ui.widgets.ProgressWidget.prototype.flatten = recoil.frp.struct.NO_FLATTEN;

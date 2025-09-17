@@ -125,6 +125,15 @@ export class Message{
         }
         this.parts = myParts;
     }
+    isEmpty():boolean {
+        for (let p of this.parts) {
+            if (p.toString().trim().length > 0) {
+                return false
+            }
+        }
+        return true
+    }
+
     /**
      * partially resolve a message some parameters may still be present, this will handle, messages inside messages
      *
@@ -140,6 +149,18 @@ export class Message{
 
         return new Message(message);
     };
+
+    static toString(message:Message|string|null|undefined) : string|null {
+        if (message == null) {
+            return null;
+        }
+        if (message instanceof Message) {
+            return message.toString();
+        }
+
+        return message.trim().length === 0 ? null : message;
+
+    }
 
     clone():Message{
         return this;

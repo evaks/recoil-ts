@@ -18,15 +18,12 @@
  * @author eae@google.com (Emil A Eklund)
  */
 
-goog.provide('goog.positioning.ViewportPosition');
-
-goog.require('goog.math.Coordinate');
-goog.require('goog.positioning');
-goog.require('goog.positioning.AbstractPosition');
-goog.require('goog.positioning.Corner');
-goog.require('goog.style');
-
-
+import {AbstractPosition} from "./abstractposition";
+import {Coordinate} from "../dom/coordinate";
+import {Corner, positionAtAnchor} from "./positioning";
+import {Box} from "../dom/box";
+import {Size} from "../dom/size";
+import {getClientViewportElement} from "../dom/dom";
 
 /**
  * Encapsulates a popup position where the popup is positioned according to
@@ -39,29 +36,30 @@ goog.require('goog.style');
  * @constructor
  * @extends {goog.positioning.AbstractPosition}
  */
-goog.positioning.ViewportPosition = function(arg1, opt_arg2) {
-  this.coordinate = arg1 instanceof goog.math.Coordinate ?
-      arg1 :
-      new goog.math.Coordinate(/** @type {number} */ (arg1), opt_arg2);
-};
-goog.inherits(
-    goog.positioning.ViewportPosition, goog.positioning.AbstractPosition);
+export class ViewPortPosition extends AbstractPosition {
+    public coordinate: Coordinate;
 
+    constructor(arg1: Coordinate | number, opt_arg2?: number) {
+        super();
+        this.coordinate = arg1 instanceof Coordinate ?
+            arg1 :
+            new Coordinate(arg1, opt_arg2);
+    }
 
-/**
- * Repositions the popup according to the current state
- *
- * @param {Element} element The DOM element of the popup.
- * @param {goog.positioning.Corner} popupCorner The corner of the popup
- *     element that that should be positioned adjacent to the anchorElement.
- * @param {goog.math.Box=} opt_margin A margin specified in pixels.
- * @param {goog.math.Size=} opt_preferredSize Preferred size of the element.
- * @override
- */
-goog.positioning.ViewportPosition.prototype.reposition = function(
-    element, popupCorner, opt_margin, opt_preferredSize) {
-  goog.positioning.positionAtAnchor(
-      goog.style.getClientViewportElement(element),
-      goog.positioning.Corner.TOP_LEFT, element, popupCorner, this.coordinate,
-      opt_margin, null, opt_preferredSize);
-};
+    /**
+     * Repositions the popup according to the current state
+     *
+     * @param element The DOM element of the popup.
+     * @param popupCorner The corner of the popup
+     *     element that that should be positioned adjacent to the anchorElement.
+     * @param opt_margin A margin specified in pixels.
+     * @param opt_preferredSize Preferred size of the element.
+     */
+    reposition(
+        element: Element, popupCorner: Corner, opt_margin?: Box, opt_preferredSize?: Size) {
+        positionAtAnchor(
+            getClientViewportElement(element),
+            Corner.TOP_LEFT, element, popupCorner, this.coordinate,
+            opt_margin, undefined, opt_preferredSize);
+    }
+}

@@ -1,4 +1,4 @@
-import {TypeConverter, UnconvertType} from "./typeconverter";
+import {SupportedUnconvertType, TypeConverter, UnconvertType} from "./typeconverter";
 import {IPv6Address} from "../types/types";
 import {Messages} from "../ui/messages";
 import {IPv4AddressConverter} from "./ipv4addressconverter";
@@ -68,7 +68,7 @@ export class IPv6AddressConverter implements TypeConverter<IPv6Address, string> 
 
         return res.join('');
     }
-    unconvert(val: string): UnconvertType<IPv6Address> {
+    unconvert(val: string): SupportedUnconvertType<IPv6Address> {
         // if more than 1 part is "" not at beginning or end then fail
         // if part "" at beginning or end then must be a blank
         // last part can be ipv4 address if so max parts is 7 else 8
